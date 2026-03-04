@@ -2,7 +2,7 @@
 
 Generate 3D models from text prompts inside Unreal Engine 5 using the [fal.ai Hunyuan 3D API](https://fal.ai/models/fal-ai/hunyuan-3d/v3.1/pro/text-to-3d). Type a prompt in-game, and the generated GLB model spawns right into your world.
 
-Built entirely in C++ with a programmatic UMG widget — no Blueprint widgets needed.
+Built entirely in C++ with a programmatic UMG widget  no Blueprint widgets needed.
 
 ![Goku spawned in-game from a text prompt]<img width="735" height="877" alt="Screenshot 2026-03-04 002947" src="https://github.com/user-attachments/assets/90332b9d-4552-4289-a5aa-bec02ce18b90" />
 
@@ -29,7 +29,7 @@ The generated GLB is loaded at runtime using the [glTFRuntime](https://github.co
 ## Prerequisites
 
 - **Unreal Engine 5.5**
-- A **fal.ai API key** — get one at [fal.ai/dashboard/keys](https://fal.ai/dashboard/keys)
+- A **fal.ai API key** - get one at [fal.ai/dashboard/keys](https://fal.ai/dashboard/keys)
 
 ## Setup
 
