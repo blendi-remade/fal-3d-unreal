@@ -4,7 +4,8 @@ Generate 3D models from text prompts inside Unreal Engine 5 using the [fal.ai Hu
 
 Built entirely in C++ with a programmatic UMG widget — no Blueprint widgets needed.
 
-![Goku spawned in-game from a text prompt](https://github.com/blendi-remade/fal-3d-unreal/assets/goku-demo.png)
+![Goku spawned in-game from a text prompt]<img width="735" height="877" alt="Screenshot 2026-03-04 002947" src="https://github.com/user-attachments/assets/90332b9d-4552-4289-a5aa-bec02ce18b90" />
+
 
 ## How It Works
 
