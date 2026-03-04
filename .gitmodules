@@ -1,0 +1,3 @@
+[submodule "fal3DDemo/Plugins/glTFRuntime"]
+	path = fal3DDemo/Plugins/glTFRuntime
+	url = https://github.com/rdeioris/glTFRuntime.git

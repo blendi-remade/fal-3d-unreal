@@ -1,0 +1,42 @@
+# Unreal Engine 5 .gitignore
+
+# Compiled binaries
+fal3DDemo/Binaries/
+
+# Build artifacts
+fal3DDemo/Intermediate/
+
+# Saved data (logs, autosaves, local settings)
+fal3DDemo/Saved/
+
+# Visual Studio files
+fal3DDemo/.vs/
+fal3DDemo/*.sln
+fal3DDemo/*.suo
+fal3DDemo/*.opensdf
+fal3DDemo/*.sdf
+fal3DDemo/*.VC.db
+fal3DDemo/*.VC.opendb
+
+# Derived Data Cache
+fal3DDemo/DerivedDataCache/
+
+# Upgrade log
+fal3DDemo/UpgradeLog.htm
+
+# Claude session data
+.claude/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Stock Epic content (included in Third Person template - too large for git)
+fal3DDemo/Content/StarterContent/
+fal3DDemo/Content/Characters/
+
+# OS files
+Thumbs.db
+.DS_Store
+desktop.ini
