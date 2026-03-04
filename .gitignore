@@ -11,12 +11,16 @@ fal3DDemo/Saved/
 
 # Visual Studio files
 fal3DDemo/.vs/
+fal3DDemo/.vsconfig
 fal3DDemo/*.sln
 fal3DDemo/*.suo
 fal3DDemo/*.opensdf
 fal3DDemo/*.sdf
 fal3DDemo/*.VC.db
 fal3DDemo/*.VC.opendb
+
+# Unreal backups
+fal3DDemo/Backup/
 
 # Derived Data Cache
 fal3DDemo/DerivedDataCache/
