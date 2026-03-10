@@ -16,22 +16,14 @@
 #include "Blueprint/WidgetTree.h"
 #include "Engine/Texture2D.h"
 #include "Logging/LogMacros.h"
+#include "Styling/AppStyle.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogFalWidget, Log, All);
 
-// Unreal Editor color palette (matched from editor screenshots)
+// Accent colors (not available from FAppStyle)
 namespace FalUI
 {
-	const FLinearColor PanelBg(0.014f, 0.014f, 0.014f, 0.95f);       // #242424-ish, near opaque
-	const FLinearColor RowBg(0.022f, 0.022f, 0.022f, 1.f);           // #2a2a2a — section bg
-	const FLinearColor InputBg(0.008f, 0.008f, 0.008f, 1.f);         // #111111 — dark input field
-	const FLinearColor TextPrimary(0.78f, 0.78f, 0.78f, 1.f);        // #c8c8c8
-	const FLinearColor TextSecondary(0.45f, 0.45f, 0.45f, 1.f);      // #737373
-	const FLinearColor TextHint(0.35f, 0.35f, 0.35f, 1.f);           // #595959 — hint/placeholder
-	const FLinearColor TextAccent(0.15f, 0.45f, 0.85f, 1.f);         // Unreal blue accent
-	const FLinearColor LogTextColor(0.38f, 0.38f, 0.38f, 1.f);       // #616161
-	const FLinearColor LogBg(0.008f, 0.008f, 0.008f, 1.f);           // #111111
-	const FLinearColor SepColor(0.08f, 0.08f, 0.08f, 1.f);           // #141414 — subtle
+	const FLinearColor TextAccent(0.33f, 0.55f, 0.75f, 1.f);         // Muted steel blue (Unreal-subtle)
 	const FLinearColor BtnPrimary(0.0f, 0.28f, 0.55f, 1.f);          // Muted Unreal blue
 	const FLinearColor BtnDanger(0.22f, 0.06f, 0.06f, 1.f);          // Dark muted red
 
@@ -61,30 +53,37 @@ void UFalGeneratorWidget::NativeConstruct()
 	LogoTexture = Cast<UTexture2D>(StaticLoadObject(UTexture2D::StaticClass(), nullptr,
 		TEXT("/Game/UI/fal_logo")));
 
+	// Editor font
+	FSlateFontInfo NormalFont = FAppStyle::GetFontStyle("NormalFont");
+	FSlateFontInfo SmallFont = NormalFont;
+	SmallFont.Size = 9;
+	FSlateFontInfo TinyFont = NormalFont;
+	TinyFont.Size = 8;
+
 	// Root canvas
 	UCanvasPanel* RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("RootCanvas"));
 	WidgetTree->RootWidget = RootCanvas;
 
-	// Dark background (same structure as original that worked)
+	// Panel background — uses editor's ToolPanel.GroupBorder brush (rounded dark panel)
 	UBorder* Background = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Background"));
-	Background->SetBrushColor(FalUI::PanelBg);
-	Background->SetPadding(FMargin(20.f));
+	Background->SetBrush(*FAppStyle::GetBrush("ToolPanel.GroupBorder"));
+	Background->SetPadding(FMargin(12.f, 10.f, 12.f, 10.f));
 
 	UCanvasPanelSlot* BgSlot = RootCanvas->AddChildToCanvas(Background);
 	BgSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
 	BgSlot->SetAlignment(FVector2D(0.5f, 0.5f));
-	BgSlot->SetSize(FVector2D(450.f, 500.f));
+	BgSlot->SetSize(FVector2D(400.f, 420.f));
 	BgSlot->SetPosition(FVector2D(0.f, 0.f));
 
-	// Single vertical box (flat — same as original)
+	// Single vertical box (flat structure — proven to work)
 	UVerticalBox* VBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("VBox"));
 	Background->SetContent(VBox);
 
-	// ── Header row: Logo + Title ──
+	// ── Header row: Logo + Title (left-aligned like editor panels) ──
 	UHorizontalBox* HeaderRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HeaderRow"));
 	UVerticalBoxSlot* HeaderRowSlot = VBox->AddChildToVerticalBox(HeaderRow);
-	HeaderRowSlot->SetHorizontalAlignment(HAlign_Center);
-	HeaderRowSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
+	HeaderRowSlot->SetHorizontalAlignment(HAlign_Left);
+	HeaderRowSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 2.f));
 
 	// Logo / spinner image
 	SpinnerImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("SpinnerImage"));
@@ -100,101 +99,90 @@ void UFalGeneratorWidget::NativeConstruct()
 	LogoSlot->SetVerticalAlignment(VAlign_Center);
 	LogoSlot->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f));
 
-	// Title
+	// Title — editor font
 	UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Title"));
 	Title->SetText(FText::FromString(TEXT("fal.ai 3D Generator")));
-	FSlateFontInfo TitleFont = Title->GetFont();
-	TitleFont.Size = 18;
+	FSlateFontInfo TitleFont = NormalFont;
+	TitleFont.Size = 13;
 	Title->SetFont(TitleFont);
-	Title->SetColorAndOpacity(FSlateColor(FalUI::TextPrimary));
+	Title->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	UHorizontalBoxSlot* TitleSlot = HeaderRow->AddChildToHorizontalBox(Title);
 	TitleSlot->SetVerticalAlignment(VAlign_Center);
 
 	// ── Separator ──
-	UBorder* Sep1 = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Sep1"));
-	Sep1->SetBrushColor(FalUI::SepColor);
-	USpacer* Sep1Inner = WidgetTree->ConstructWidget<USpacer>(USpacer::StaticClass(), TEXT("Sep1Inner"));
-	Sep1Inner->SetSize(FVector2D(0.f, 1.f));
-	Sep1->SetContent(Sep1Inner);
+	USpacer* Sep1 = WidgetTree->ConstructWidget<USpacer>(USpacer::StaticClass(), TEXT("Sep1"));
+	Sep1->SetSize(FVector2D(0.f, 1.f));
 	UVerticalBoxSlot* Sep1Slot = VBox->AddChildToVerticalBox(Sep1);
 	Sep1Slot->SetHorizontalAlignment(HAlign_Fill);
-	Sep1Slot->SetPadding(FMargin(0.f, 6.f, 0.f, 10.f));
+	Sep1Slot->SetPadding(FMargin(0.f, 4.f, 0.f, 6.f));
 
 	// ── Prompt label ──
 	UTextBlock* PromptLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PromptLabel"));
-	PromptLabel->SetText(FText::FromString(TEXT("PROMPT")));
-	FSlateFontInfo LabelFont = PromptLabel->GetFont();
-	LabelFont.Size = 9;
-	PromptLabel->SetFont(LabelFont);
-	PromptLabel->SetColorAndOpacity(FSlateColor(FalUI::TextSecondary));
+	PromptLabel->SetText(FText::FromString(TEXT("Prompt")));
+	PromptLabel->SetFont(SmallFont);
+	PromptLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.55f, 0.55f, 0.55f)));
 	UVerticalBoxSlot* LabelSlot = VBox->AddChildToVerticalBox(PromptLabel);
-	LabelSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
+	LabelSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 2.f));
 
-	// ── Prompt input ──
+	// ── Prompt input — use editor text box style ──
 	PromptInput = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), TEXT("PromptInput"));
 	PromptInput->SetHintText(FText::FromString(TEXT("Describe what you want to generate...")));
 
-	// Dark input field matching Unreal editor style
-	PromptInput->WidgetStyle.BackgroundImageNormal.TintColor = FSlateColor(FalUI::InputBg);
-	PromptInput->WidgetStyle.BackgroundImageHovered.TintColor = FSlateColor(FLinearColor(0.015f, 0.015f, 0.015f, 1.f));
-	PromptInput->WidgetStyle.BackgroundImageFocused.TintColor = FSlateColor(FLinearColor(0.015f, 0.015f, 0.015f, 1.f));
-	PromptInput->WidgetStyle.ForegroundColor = FSlateColor(FalUI::TextPrimary);
+	// Apply editor's own editable text box style for native look
+	const FEditableTextBoxStyle* EditorTextBoxStyle = &FAppStyle::Get().GetWidgetStyle<FEditableTextBoxStyle>("NormalEditableTextBox");
+	if (EditorTextBoxStyle)
+	{
+		PromptInput->WidgetStyle = *EditorTextBoxStyle;
+	}
 
 	UVerticalBoxSlot* InputSlot = VBox->AddChildToVerticalBox(PromptInput);
-	InputSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
+	InputSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
 
-	// ── Generate button ──
+	// ── Generate button — editor flat style ──
 	GenerateButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("GenerateButton"));
-	GenerateButton->SetBackgroundColor(FalUI::BtnPrimary);
+	GenerateButton->SetStyle(FAppStyle::Get().GetWidgetStyle<FButtonStyle>("Button"));
 	GenerateButton->OnClicked.AddDynamic(this, &UFalGeneratorWidget::OnGenerateClicked);
 
 	UTextBlock* BtnText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("GenerateBtnText"));
 	BtnText->SetText(FText::FromString(TEXT("Generate 3D Model")));
-	FSlateFontInfo BtnFont = BtnText->GetFont();
-	BtnFont.Size = 12;
+	FSlateFontInfo BtnFont = NormalFont;
+	BtnFont.Size = 11;
 	BtnText->SetFont(BtnFont);
-	BtnText->SetColorAndOpacity(FSlateColor(FalUI::TextPrimary));
+	BtnText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	BtnText->SetJustification(ETextJustify::Center);
 	GenerateButton->AddChild(BtnText);
 
 	UVerticalBoxSlot* GenBtnSlot = VBox->AddChildToVerticalBox(GenerateButton);
 	GenBtnSlot->SetHorizontalAlignment(HAlign_Fill);
-	GenBtnSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 10.f));
+	GenBtnSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
 
 	// ── Status text ──
 	StatusText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("StatusText"));
 	StatusText->SetText(FText::FromString(TEXT("")));
-	FSlateFontInfo StatusFont = StatusText->GetFont();
-	StatusFont.Size = 10;
-	StatusText->SetFont(StatusFont);
+	StatusText->SetFont(SmallFont);
 	StatusText->SetColorAndOpacity(FSlateColor(FalUI::TextAccent));
 	StatusText->SetAutoWrapText(true);
 	UVerticalBoxSlot* StatusSlot = VBox->AddChildToVerticalBox(StatusText);
-	StatusSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f));
+	StatusSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 3.f));
 
 	// ── Separator ──
-	UBorder* Sep2 = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Sep2"));
-	Sep2->SetBrushColor(FalUI::SepColor);
-	USpacer* Sep2Inner = WidgetTree->ConstructWidget<USpacer>(USpacer::StaticClass(), TEXT("Sep2Inner"));
-	Sep2Inner->SetSize(FVector2D(0.f, 1.f));
-	Sep2->SetContent(Sep2Inner);
+	USpacer* Sep2 = WidgetTree->ConstructWidget<USpacer>(USpacer::StaticClass(), TEXT("Sep2"));
+	Sep2->SetSize(FVector2D(0.f, 1.f));
 	UVerticalBoxSlot* Sep2Slot = VBox->AddChildToVerticalBox(Sep2);
 	Sep2Slot->SetHorizontalAlignment(HAlign_Fill);
-	Sep2Slot->SetPadding(FMargin(0.f, 2.f, 0.f, 4.f));
+	Sep2Slot->SetPadding(FMargin(0.f, 2.f, 0.f, 3.f));
 
 	// ── Log header label ──
 	UTextBlock* LogLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("LogLabel"));
-	LogLabel->SetText(FText::FromString(TEXT("OUTPUT LOG")));
-	FSlateFontInfo LogLabelFont = LogLabel->GetFont();
-	LogLabelFont.Size = 8;
-	LogLabel->SetFont(LogLabelFont);
-	LogLabel->SetColorAndOpacity(FSlateColor(FalUI::TextSecondary));
+	LogLabel->SetText(FText::FromString(TEXT("Output Log")));
+	LogLabel->SetFont(SmallFont);
+	LogLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.55f, 0.55f, 0.55f)));
 	UVerticalBoxSlot* LogLabelSlot = VBox->AddChildToVerticalBox(LogLabel);
-	LogLabelSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
+	LogLabelSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 2.f));
 
-	// ── Log area: border + scroll box ──
+	// ── Log area — dark inner panel ──
 	UBorder* LogBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("LogBorder"));
-	LogBorder->SetBrushColor(FalUI::LogBg);
+	LogBorder->SetBrush(*FAppStyle::GetBrush("ToolPanel.DarkGroupBorder"));
 	LogBorder->SetPadding(FMargin(8.f, 6.f, 8.f, 6.f));
 
 	LogScrollBox = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("LogScrollBox"));
@@ -202,29 +190,25 @@ void UFalGeneratorWidget::NativeConstruct()
 
 	LogText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("LogText"));
 	LogText->SetText(FText::FromString(TEXT("Ready.")));
-	FSlateFontInfo LogFont = LogText->GetFont();
-	LogFont.Size = 8;
-	LogText->SetFont(LogFont);
-	LogText->SetColorAndOpacity(FSlateColor(FalUI::LogTextColor));
+	LogText->SetFont(TinyFont);
+	LogText->SetColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)));
 	LogText->SetAutoWrapText(true);
 	LogScrollBox->AddChild(LogText);
 
 	UVerticalBoxSlot* LogSlot = VBox->AddChildToVerticalBox(LogBorder);
 	LogSlot->SetHorizontalAlignment(HAlign_Fill);
 	LogSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-	LogSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 10.f));
+	LogSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
 
-	// ── Close button ──
+	// ── Close button — editor flat style ──
 	CloseButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("CloseButton"));
-	CloseButton->SetBackgroundColor(FalUI::BtnDanger);
+	CloseButton->SetStyle(FAppStyle::Get().GetWidgetStyle<FButtonStyle>("Button"));
 	CloseButton->OnClicked.AddDynamic(this, &UFalGeneratorWidget::OnCloseClicked);
 
 	UTextBlock* CloseBtnText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CloseBtnText"));
-	CloseBtnText->SetText(FText::FromString(TEXT("Close (Tab)")));
-	FSlateFontInfo CloseFont = CloseBtnText->GetFont();
-	CloseFont.Size = 10;
-	CloseBtnText->SetFont(CloseFont);
-	CloseBtnText->SetColorAndOpacity(FSlateColor(FalUI::TextPrimary));
+	CloseBtnText->SetText(FText::FromString(TEXT("Close (P)")));
+	CloseBtnText->SetFont(SmallFont);
+	CloseBtnText->SetColorAndOpacity(FSlateColor(FLinearColor(0.55f, 0.55f, 0.55f)));
 	CloseBtnText->SetJustification(ETextJustify::Center);
 	CloseButton->AddChild(CloseBtnText);
 
@@ -245,7 +229,6 @@ void UFalGeneratorWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 		float CycleTime = FMath::Fmod(SpinnerTime, 4.f);
 		float T = CycleTime / 4.f;
 
-		// Rotation with ease-in-out per quarter
 		float RotPhase = T * 4.f;
 		float RotIndex = FMath::FloorToFloat(RotPhase);
 		float RotFrac = RotPhase - RotIndex;
@@ -299,7 +282,6 @@ void UFalGeneratorWidget::UpdateStatus(const FString& Message)
 		AddLogLine(Message);
 	}
 
-	// Spinner active during generation (not on final/error states)
 	bSpinnerVisible = !Message.IsEmpty()
 		&& !Message.Contains(TEXT("Failed"))
 		&& !Message.Contains(TEXT("spawned"))
