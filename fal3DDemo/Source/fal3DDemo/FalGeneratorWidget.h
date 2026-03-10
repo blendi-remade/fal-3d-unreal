@@ -49,6 +49,9 @@ private:
 	UButton* CloseButton;
 
 	UPROPERTY()
+	class UCheckBox* TPoseCheckBox;
+
+	UPROPERTY()
 	UImage* SpinnerImage;
 
 	UPROPERTY()

@@ -13,6 +13,7 @@
 #include "Components/Image.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
+#include "Components/CheckBox.h"
 #include "Blueprint/WidgetTree.h"
 #include "Engine/Texture2D.h"
 #include "Logging/LogMacros.h"
@@ -136,7 +137,25 @@ void UFalGeneratorWidget::NativeConstruct()
 	}
 
 	UVerticalBoxSlot* InputSlot = VBox->AddChildToVerticalBox(PromptInput);
-	InputSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
+	InputSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
+
+	// ── T-pose checkbox ──
+	UHorizontalBox* TPoseRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("TPoseRow"));
+	UVerticalBoxSlot* TPoseRowSlot = VBox->AddChildToVerticalBox(TPoseRow);
+	TPoseRowSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
+
+	TPoseCheckBox = WidgetTree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass(), TEXT("TPoseCheckBox"));
+	TPoseCheckBox->SetCheckedState(ECheckBoxState::Unchecked);
+	UHorizontalBoxSlot* CheckSlot = TPoseRow->AddChildToHorizontalBox(TPoseCheckBox);
+	CheckSlot->SetVerticalAlignment(VAlign_Center);
+	CheckSlot->SetPadding(FMargin(0.f, 0.f, 4.f, 0.f));
+
+	UTextBlock* TPoseLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TPoseLabel"));
+	TPoseLabel->SetText(FText::FromString(TEXT("T-pose")));
+	TPoseLabel->SetFont(SmallFont);
+	TPoseLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.55f, 0.55f, 0.55f)));
+	UHorizontalBoxSlot* TPoseLabelSlot = TPoseRow->AddChildToHorizontalBox(TPoseLabel);
+	TPoseLabelSlot->SetVerticalAlignment(VAlign_Center);
 
 	// ── Generate button — editor flat style ──
 	GenerateButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("GenerateButton"));
@@ -336,6 +355,10 @@ void UFalGeneratorWidget::OnGenerateClicked()
 		FString Prompt = PromptInput->GetText().ToString();
 		if (!Prompt.IsEmpty())
 		{
+			if (TPoseCheckBox && TPoseCheckBox->IsChecked())
+			{
+				Prompt += TEXT(" T-pose");
+			}
 			AddLogLine(FString::Printf(TEXT("Generating: \"%s\""), *Prompt));
 			OnGenerateRequested.Broadcast(Prompt);
 		}
