@@ -154,6 +154,14 @@ private:
 	bool bUsingRiggedCharacter = false;
 	ERuntimeMovementState CurrentMovementState = ERuntimeMovementState::Idle;
 
+	// Per-animation scale correction (ratio vs idle skeleton)
+	float BaseComputedScale = 1.f;
+	float WalkScaleCorrection = 1.f;
+	float RunScaleCorrection = 1.f;
+	float JumpScaleCorrection = 1.f;
+
+	float GetRootBoneScale(UglTFRuntimeAsset* Asset) const;
+
 	UPROPERTY()
 	AActor* SpawnedStaticActor;
 

@@ -491,6 +491,30 @@ void Afal3DDemoCharacter::OnAssetDownloaded()
 	}
 }
 
+float Afal3DDemoCharacter::GetRootBoneScale(UglTFRuntimeAsset* Asset) const
+{
+	if (!Asset) return 1.f;
+
+	// Load the skeleton from this GLB to read its root bone scale
+	FglTFRuntimeSkeletalMeshConfig TempConfig;
+	USkeletalMesh* TempMesh = Asset->LoadSkeletalMeshRecursive(
+		TEXT(""), {}, TempConfig, EglTFRuntimeRecursiveMode::Ignore);
+
+	if (!TempMesh) return 1.f;
+
+	const FReferenceSkeleton& Skel = TempMesh->GetRefSkeleton();
+	if (Skel.GetNum() == 0) return 1.f;
+
+	// Root bone (Hips) scale — use the average of XYZ (should be uniform)
+	FVector Scale = Skel.GetRefBonePose()[0].GetScale3D();
+	float AvgScale = (FMath::Abs(Scale.X) + FMath::Abs(Scale.Y) + FMath::Abs(Scale.Z)) / 3.f;
+
+	UE_LOG(LogTemplateCharacter, Log, TEXT("  Root bone scale from GLB: (%.4f, %.4f, %.4f) avg=%.4f"),
+		Scale.X, Scale.Y, Scale.Z, AvgScale);
+
+	return (AvgScale > 0.0001f) ? AvgScale : 1.f;
+}
+
 void Afal3DDemoCharacter::ExtractAndSwapCharacter()
 {
 	if (!RiggedGlbAsset)
@@ -590,6 +614,16 @@ void Afal3DDemoCharacter::ExtractAndSwapCharacter()
 		UE_LOG(LogTemplateCharacter, Log, TEXT("Fall animation: %s"), FallAnim ? TEXT("OK") : TEXT("FAIL"));
 	}
 
+	// Step 2b: Hardcoded per-animation scale corrections.
+	// Meshy animation GLBs bake slightly different scales into keyframe data.
+	// These values compensate so all anims render at the same visual size as idle.
+	// Walk is ~15% smaller than idle, run is ~25% smaller than idle.
+	WalkScaleCorrection = 1.10f;
+	RunScaleCorrection  = 1.17f;
+	JumpScaleCorrection = 1.17f;
+	UE_LOG(LogTemplateCharacter, Log, TEXT("Scale corrections: walk=%.2f run=%.2f jump=%.2f"),
+		WalkScaleCorrection, RunScaleCorrection, JumpScaleCorrection);
+
 	// Step 3: Compute dynamic scale to fit the character to ~180cm (capsule height)
 	float MeshHeight = MeshBounds.BoxExtent.Z * 2.f;
 	float TargetHeight = 180.f;
@@ -619,6 +653,7 @@ void Afal3DDemoCharacter::ExtractAndSwapCharacter()
 	RiggedMeshComp->SetSkeletalMeshAsset(RiggedSkeletalMesh);
 	RiggedMeshComp->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 
+	BaseComputedScale = ComputedScale;
 	RiggedMeshComp->SetRelativeScale3D(FVector(ComputedScale));
 	RiggedMeshComp->SetRelativeLocation(FVector(0.f, 0.f, OffsetZ));
 	RiggedMeshComp->SetRelativeRotation(FRotator(0.f, 90.f, 0.f));
@@ -735,6 +770,24 @@ void Afal3DDemoCharacter::UpdateMovementAnimation()
 
 		if (AnimToPlay && RiggedMeshComp)
 		{
+			// Apply per-animation scale correction so all anims render at the same size
+			float ScaleForAnim = BaseComputedScale;
+			switch (NewState)
+			{
+			case ERuntimeMovementState::Walk:
+				ScaleForAnim *= WalkScaleCorrection;
+				break;
+			case ERuntimeMovementState::Run:
+				ScaleForAnim *= RunScaleCorrection;
+				break;
+			case ERuntimeMovementState::Jump:
+			case ERuntimeMovementState::Fall:
+				ScaleForAnim *= JumpScaleCorrection;
+				break;
+			default:
+				break; // Idle uses base scale
+			}
+			RiggedMeshComp->SetRelativeScale3D(FVector(ScaleForAnim));
 			RiggedMeshComp->PlayAnimation(AnimToPlay, bLoop);
 		}
 	}
