@@ -12,7 +12,8 @@ public class fal3DDemo : ModuleRules
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
 			"HTTP", "Json", "JsonUtilities",
 			"UMG", "Slate", "SlateCore",
-			"glTFRuntime"
+			"glTFRuntime",
+			"ImageWrapper", "RenderCore"
 		});
 	}
 }
