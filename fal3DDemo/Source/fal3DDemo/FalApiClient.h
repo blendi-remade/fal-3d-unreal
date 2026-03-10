@@ -38,6 +38,9 @@ public:
 	UPROPERTY(BlueprintReadOnly)
 	FString StatusMessage;
 
+	// Texture URL from the last generation result
+	FString LastTextureUrl;
+
 	void GenerateModel(const FString& Prompt);
 
 private:

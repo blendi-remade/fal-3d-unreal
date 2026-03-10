@@ -102,7 +102,7 @@ void UFalApiClient::SubmitRequest(const FString& Prompt)
 	TSharedPtr<FJsonObject> JsonBody = MakeShareable(new FJsonObject());
 	JsonBody->SetStringField(TEXT("prompt"), Prompt);
 	JsonBody->SetStringField(TEXT("generate_type"), TEXT("Normal"));
-	JsonBody->SetNumberField(TEXT("face_count"), 500000);
+	JsonBody->SetNumberField(TEXT("face_count"), 300000);
 
 	FString RequestBody;
 	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RequestBody);
@@ -281,6 +281,18 @@ void UFalApiClient::OnFetchResponse(FHttpRequestPtr Request, FHttpResponsePtr Re
 	if (JsonResponse->TryGetObjectField(TEXT("model_glb"), ModelGlbObj))
 	{
 		GlbUrl = (*ModelGlbObj)->GetStringField(TEXT("url"));
+	}
+
+	// Extract texture URL for rigging
+	const TSharedPtr<FJsonObject>* ModelUrlsObj = nullptr;
+	if (JsonResponse->TryGetObjectField(TEXT("model_urls"), ModelUrlsObj))
+	{
+		const TSharedPtr<FJsonObject>* TextureObj = nullptr;
+		if ((*ModelUrlsObj)->TryGetObjectField(TEXT("texture"), TextureObj))
+		{
+			LastTextureUrl = (*TextureObj)->GetStringField(TEXT("url"));
+			UE_LOG(LogFalApi, Log, TEXT("Texture URL: %s"), *LastTextureUrl);
+		}
 	}
 
 	if (GlbUrl.IsEmpty())
