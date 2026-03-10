@@ -20,6 +20,11 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Dom/JsonObject.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -54,6 +59,51 @@ Afal3DDemoCharacter::Afal3DDemoCharacter()
 	FollowCamera->bUsePawnControlRotation = false;
 }
 
+FString Afal3DDemoCharacter::GetCacheFilePath() const
+{
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("LastGeneratedCharacter.json"));
+}
+
+void Afal3DDemoCharacter::SaveUrlsToCache(const FRiggedCharacterUrls& Urls)
+{
+	TSharedPtr<FJsonObject> Json = MakeShareable(new FJsonObject());
+	Json->SetStringField(TEXT("RiggedGlbUrl"), Urls.RiggedGlbUrl);
+	Json->SetStringField(TEXT("WalkAnimGlbUrl"), Urls.WalkAnimGlbUrl);
+	Json->SetStringField(TEXT("RunAnimGlbUrl"), Urls.RunAnimGlbUrl);
+	Json->SetStringField(TEXT("IdleAnimGlbUrl"), Urls.IdleAnimGlbUrl);
+	Json->SetStringField(TEXT("JumpAnimGlbUrl"), Urls.JumpAnimGlbUrl);
+
+	FString Output;
+	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
+	FJsonSerializer::Serialize(Json.ToSharedRef(), Writer);
+	FFileHelper::SaveStringToFile(Output, *GetCacheFilePath());
+	UE_LOG(LogTemplateCharacter, Log, TEXT("Cached character URLs to %s"), *GetCacheFilePath());
+}
+
+bool Afal3DDemoCharacter::LoadUrlsFromCache(FRiggedCharacterUrls& OutUrls)
+{
+	FString FileContents;
+	if (!FFileHelper::LoadFileToString(FileContents, *GetCacheFilePath()))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Json;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(FileContents);
+	if (!FJsonSerializer::Deserialize(Reader, Json) || !Json.IsValid())
+	{
+		return false;
+	}
+
+	OutUrls.RiggedGlbUrl = Json->GetStringField(TEXT("RiggedGlbUrl"));
+	OutUrls.WalkAnimGlbUrl = Json->GetStringField(TEXT("WalkAnimGlbUrl"));
+	OutUrls.RunAnimGlbUrl = Json->GetStringField(TEXT("RunAnimGlbUrl"));
+	OutUrls.IdleAnimGlbUrl = Json->GetStringField(TEXT("IdleAnimGlbUrl"));
+	OutUrls.JumpAnimGlbUrl = Json->GetStringField(TEXT("JumpAnimGlbUrl"));
+
+	return !OutUrls.RiggedGlbUrl.IsEmpty();
+}
+
 void Afal3DDemoCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -71,6 +121,14 @@ void Afal3DDemoCharacter::BeginPlay()
 	{
 		GeneratorWidget->OnGenerateRequested.AddDynamic(this, &Afal3DDemoCharacter::OnGenerateRequested);
 		GeneratorWidget->OnCloseRequested.AddDynamic(this, &Afal3DDemoCharacter::OnCloseRequested);
+	}
+
+	// Auto-load previously generated character if cached URLs exist
+	FRiggedCharacterUrls CachedUrls;
+	if (LoadUrlsFromCache(CachedUrls))
+	{
+		UE_LOG(LogTemplateCharacter, Log, TEXT("Found cached character, auto-loading..."));
+		StartLoadingRiggedAssets(CachedUrls);
 	}
 }
 
@@ -319,6 +377,9 @@ void Afal3DDemoCharacter::OnRiggingComplete(const FRiggedCharacterUrls& Urls, co
 	{
 		GeneratorWidget->UpdateStatus(TEXT("Downloading rigged character..."));
 	}
+
+	// Cache URLs so the character auto-loads on next play session
+	SaveUrlsToCache(Urls);
 
 	StartLoadingRiggedAssets(Urls);
 }

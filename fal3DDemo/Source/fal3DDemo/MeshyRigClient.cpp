@@ -233,20 +233,13 @@ void UMeshyRigClient::OnRiggingPollResponse(FHttpRequestPtr Request, FHttpRespon
 		if (JsonResponse->TryGetObjectField(TEXT("result"), ResultObj))
 		{
 			ResultUrls.RiggedGlbUrl = (*ResultObj)->GetStringField(TEXT("rigged_character_glb_url"));
-
-			const TSharedPtr<FJsonObject>* AnimsObj = nullptr;
-			if ((*ResultObj)->TryGetObjectField(TEXT("basic_animations"), AnimsObj))
-			{
-				ResultUrls.WalkAnimGlbUrl = (*AnimsObj)->GetStringField(TEXT("walking_glb_url"));
-				ResultUrls.RunAnimGlbUrl = (*AnimsObj)->GetStringField(TEXT("running_glb_url"));
-			}
+			// Skip basic_animations walk/run — they have inconsistent bone scaling.
+			// All animations are requested via the Animation API instead.
 		}
 
 		UE_LOG(LogMeshyRig, Log, TEXT("Rigging succeeded! Rigged GLB: %s"), *ResultUrls.RiggedGlbUrl);
-		UE_LOG(LogMeshyRig, Log, TEXT("Walk anim: %s"), *ResultUrls.WalkAnimGlbUrl);
-		UE_LOG(LogMeshyRig, Log, TEXT("Run anim: %s"), *ResultUrls.RunAnimGlbUrl);
 
-		// Now request additional animations (idle, jump, fall)
+		// Request all animations from the Animation API for consistent bone scaling
 		SubmitAnimations();
 	}
 	else if (Status == TEXT("FAILED"))
@@ -270,8 +263,9 @@ void UMeshyRigClient::SubmitAnimations()
 {
 	SetState(EMeshyRigState::AnimationsSubmitting, TEXT("Requesting animations..."));
 
-	// Request idle (0), jump (44). Fall animation removed — jump anim is reused for descent.
-	TArray<int32> ActionIds = { 0, 44 };
+	// All animations from Animation API for consistent bone scaling:
+	// idle (0), walk (30=Casual_Walk), run (14=Run_02), jump (466=Regular_Jump)
+	TArray<int32> ActionIds = { 0, 30, 14, 466 };
 	for (int32 ActionId : ActionIds)
 	{
 		FAnimTask Task;
@@ -440,8 +434,9 @@ void UMeshyRigClient::OnAnimationPollResponse(FHttpRequestPtr Request, FHttpResp
 
 		// Map to result URLs
 		if (ActionId == 0) ResultUrls.IdleAnimGlbUrl = GlbUrl;
-		else if (ActionId == 44) ResultUrls.JumpAnimGlbUrl = GlbUrl;
-		else if (ActionId == 8) ResultUrls.FallAnimGlbUrl = GlbUrl;
+		else if (ActionId == 30) ResultUrls.WalkAnimGlbUrl = GlbUrl;
+		else if (ActionId == 14) ResultUrls.RunAnimGlbUrl = GlbUrl;
+		else if (ActionId == 466) ResultUrls.JumpAnimGlbUrl = GlbUrl;
 
 		if (AllAnimationsComplete())
 		{

@@ -165,6 +165,11 @@ private:
 	void ExtractAndSwapCharacter();
 	void UpdateMovementAnimation();
 
+	// URL caching for persistence across play sessions
+	void SaveUrlsToCache(const FRiggedCharacterUrls& Urls);
+	bool LoadUrlsFromCache(FRiggedCharacterUrls& OutUrls);
+	FString GetCacheFilePath() const;
+
 	UFUNCTION()
 	void OnRiggedGlbLoaded(UglTFRuntimeAsset* Asset);
 
