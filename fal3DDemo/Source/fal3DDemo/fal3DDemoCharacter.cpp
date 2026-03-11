@@ -9,6 +9,8 @@
 #include "GameFramework/Controller.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
 #include "InputActionValue.h"
 #include "FalGeneratorWidget.h"
 #include "FalApiClient.h"
@@ -72,6 +74,10 @@ void Afal3DDemoCharacter::SaveUrlsToCache(const FRiggedCharacterUrls& Urls)
 	Json->SetStringField(TEXT("RunAnimGlbUrl"), Urls.RunAnimGlbUrl);
 	Json->SetStringField(TEXT("IdleAnimGlbUrl"), Urls.IdleAnimGlbUrl);
 	Json->SetStringField(TEXT("JumpAnimGlbUrl"), Urls.JumpAnimGlbUrl);
+	Json->SetStringField(TEXT("SprintAnimGlbUrl"), Urls.SprintAnimGlbUrl);
+	Json->SetStringField(TEXT("BoxingAnimGlbUrl"), Urls.BoxingAnimGlbUrl);
+	Json->SetStringField(TEXT("KickAnimGlbUrl"), Urls.KickAnimGlbUrl);
+	Json->SetStringField(TEXT("PunchAnimGlbUrl"), Urls.PunchAnimGlbUrl);
 
 	FString Output;
 	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
@@ -100,6 +106,10 @@ bool Afal3DDemoCharacter::LoadUrlsFromCache(FRiggedCharacterUrls& OutUrls)
 	OutUrls.RunAnimGlbUrl = Json->GetStringField(TEXT("RunAnimGlbUrl"));
 	OutUrls.IdleAnimGlbUrl = Json->GetStringField(TEXT("IdleAnimGlbUrl"));
 	OutUrls.JumpAnimGlbUrl = Json->GetStringField(TEXT("JumpAnimGlbUrl"));
+	OutUrls.SprintAnimGlbUrl = Json->GetStringField(TEXT("SprintAnimGlbUrl"));
+	OutUrls.BoxingAnimGlbUrl = Json->GetStringField(TEXT("BoxingAnimGlbUrl"));
+	OutUrls.KickAnimGlbUrl = Json->GetStringField(TEXT("KickAnimGlbUrl"));
+	OutUrls.PunchAnimGlbUrl = Json->GetStringField(TEXT("PunchAnimGlbUrl"));
 
 	return !OutUrls.RiggedGlbUrl.IsEmpty();
 }
@@ -123,6 +133,42 @@ void Afal3DDemoCharacter::BeginPlay()
 		GeneratorWidget->OnCloseRequested.AddDynamic(this, &Afal3DDemoCharacter::OnCloseRequested);
 	}
 
+	// Create runtime input actions for sprint and combat (no editor setup needed)
+	SprintInputAction = NewObject<UInputAction>(this);
+	SprintInputAction->ValueType = EInputActionValueType::Boolean;
+
+	PunchInputAction = NewObject<UInputAction>(this);
+	PunchInputAction->ValueType = EInputActionValueType::Boolean;
+
+	KickInputAction = NewObject<UInputAction>(this);
+	KickInputAction->ValueType = EInputActionValueType::Boolean;
+
+	BoxingInputAction = NewObject<UInputAction>(this);
+	BoxingInputAction->ValueType = EInputActionValueType::Boolean;
+
+	CombatMappingContext = NewObject<UInputMappingContext>(this);
+	CombatMappingContext->MapKey(SprintInputAction, EKeys::LeftShift);
+	CombatMappingContext->MapKey(PunchInputAction, EKeys::LeftMouseButton);
+	CombatMappingContext->MapKey(KickInputAction, EKeys::F);
+	CombatMappingContext->MapKey(BoxingInputAction, EKeys::V);
+
+	if (APlayerController* PC = Cast<APlayerController>(Controller))
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			Subsystem->AddMappingContext(CombatMappingContext, 1);
+		}
+	}
+
+	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InputComponent))
+	{
+		EIC->BindAction(SprintInputAction, ETriggerEvent::Started, this, &Afal3DDemoCharacter::OnSprintStarted);
+		EIC->BindAction(SprintInputAction, ETriggerEvent::Completed, this, &Afal3DDemoCharacter::OnSprintEnded);
+		EIC->BindAction(PunchInputAction, ETriggerEvent::Started, this, &Afal3DDemoCharacter::OnPunchPressed);
+		EIC->BindAction(KickInputAction, ETriggerEvent::Started, this, &Afal3DDemoCharacter::OnKickPressed);
+		EIC->BindAction(BoxingInputAction, ETriggerEvent::Started, this, &Afal3DDemoCharacter::OnBoxingPressed);
+	}
+
 	// Auto-load previously generated character if cached URLs exist
 	FRiggedCharacterUrls CachedUrls;
 	if (LoadUrlsFromCache(CachedUrls))
@@ -138,7 +184,24 @@ void Afal3DDemoCharacter::Tick(float DeltaTime)
 
 	if (bUsingRiggedCharacter)
 	{
-		UpdateMovementAnimation();
+		// Update sprint speed
+		GetCharacterMovement()->MaxWalkSpeed = bSprintHeld ? 800.f : 500.f;
+
+		// Check if combat animation finished
+		if (bPlayingCombatAnim)
+		{
+			CombatAnimTimeRemaining -= DeltaTime;
+			if (CombatAnimTimeRemaining <= 0.f)
+			{
+				bPlayingCombatAnim = false;
+				CurrentPlayingAnim = nullptr; // Force movement anim re-evaluation
+			}
+		}
+
+		if (!bPlayingCombatAnim)
+		{
+			UpdateMovementAnimation();
+		}
 	}
 }
 
@@ -396,12 +459,20 @@ void Afal3DDemoCharacter::StartLoadingRiggedAssets(const FRiggedCharacterUrls& U
 	IdleAnimAsset = nullptr;
 	JumpAnimAsset = nullptr;
 	FallAnimAsset = nullptr;
+	SprintAnimAsset = nullptr;
+	BoxingAnimAsset = nullptr;
+	KickAnimAsset = nullptr;
+	PunchAnimAsset = nullptr;
 	RiggedSkeletalMesh = nullptr;
 	IdleAnim = nullptr;
 	WalkAnim = nullptr;
 	RunAnim = nullptr;
 	JumpAnim = nullptr;
 	FallAnim = nullptr;
+	SprintAnim = nullptr;
+	BoxingAnim = nullptr;
+	KickAnim = nullptr;
+	PunchAnim = nullptr;
 
 	// Default SceneScale=100 converts glTF meters to UE centimeters (1.7m → 170 UE units).
 	FglTFRuntimeConfig LoadConfig;
@@ -423,6 +494,10 @@ void Afal3DDemoCharacter::StartLoadingRiggedAssets(const FRiggedCharacterUrls& U
 	LoadUrl(Urls.IdleAnimGlbUrl, FName("OnIdleAnimLoaded"));
 	LoadUrl(Urls.JumpAnimGlbUrl, FName("OnJumpAnimLoaded"));
 	LoadUrl(Urls.FallAnimGlbUrl, FName("OnFallAnimLoaded"));
+	LoadUrl(Urls.SprintAnimGlbUrl, FName("OnSprintAnimLoaded"));
+	LoadUrl(Urls.BoxingAnimGlbUrl, FName("OnBoxingAnimLoaded"));
+	LoadUrl(Urls.KickAnimGlbUrl, FName("OnKickAnimLoaded"));
+	LoadUrl(Urls.PunchAnimGlbUrl, FName("OnPunchAnimLoaded"));
 
 	UE_LOG(LogTemplateCharacter, Log, TEXT("Started downloading %d rigged assets"), PendingDownloads);
 
@@ -472,6 +547,34 @@ void Afal3DDemoCharacter::OnFallAnimLoaded(UglTFRuntimeAsset* Asset)
 {
 	FallAnimAsset = Asset;
 	UE_LOG(LogTemplateCharacter, Log, TEXT("Fall anim downloaded: %s"), Asset ? TEXT("OK") : TEXT("FAIL"));
+	OnAssetDownloaded();
+}
+
+void Afal3DDemoCharacter::OnSprintAnimLoaded(UglTFRuntimeAsset* Asset)
+{
+	SprintAnimAsset = Asset;
+	UE_LOG(LogTemplateCharacter, Log, TEXT("Sprint anim downloaded: %s"), Asset ? TEXT("OK") : TEXT("FAIL"));
+	OnAssetDownloaded();
+}
+
+void Afal3DDemoCharacter::OnBoxingAnimLoaded(UglTFRuntimeAsset* Asset)
+{
+	BoxingAnimAsset = Asset;
+	UE_LOG(LogTemplateCharacter, Log, TEXT("Boxing anim downloaded: %s"), Asset ? TEXT("OK") : TEXT("FAIL"));
+	OnAssetDownloaded();
+}
+
+void Afal3DDemoCharacter::OnKickAnimLoaded(UglTFRuntimeAsset* Asset)
+{
+	KickAnimAsset = Asset;
+	UE_LOG(LogTemplateCharacter, Log, TEXT("Kick anim downloaded: %s"), Asset ? TEXT("OK") : TEXT("FAIL"));
+	OnAssetDownloaded();
+}
+
+void Afal3DDemoCharacter::OnPunchAnimLoaded(UglTFRuntimeAsset* Asset)
+{
+	PunchAnimAsset = Asset;
+	UE_LOG(LogTemplateCharacter, Log, TEXT("Punch anim downloaded: %s"), Asset ? TEXT("OK") : TEXT("FAIL"));
 	OnAssetDownloaded();
 }
 
@@ -613,6 +716,26 @@ void Afal3DDemoCharacter::ExtractAndSwapCharacter()
 		FallAnim = FallAnimAsset->LoadSkeletalAnimation(RiggedSkeletalMesh, 0, SkeletalAnimConfig);
 		UE_LOG(LogTemplateCharacter, Log, TEXT("Fall animation: %s"), FallAnim ? TEXT("OK") : TEXT("FAIL"));
 	}
+	if (SprintAnimAsset)
+	{
+		SprintAnim = SprintAnimAsset->LoadSkeletalAnimation(RiggedSkeletalMesh, 0, SkeletalAnimConfig);
+		UE_LOG(LogTemplateCharacter, Log, TEXT("Sprint animation: %s"), SprintAnim ? TEXT("OK") : TEXT("FAIL"));
+	}
+	if (BoxingAnimAsset)
+	{
+		BoxingAnim = BoxingAnimAsset->LoadSkeletalAnimation(RiggedSkeletalMesh, 0, SkeletalAnimConfig);
+		UE_LOG(LogTemplateCharacter, Log, TEXT("Boxing animation: %s"), BoxingAnim ? TEXT("OK") : TEXT("FAIL"));
+	}
+	if (KickAnimAsset)
+	{
+		KickAnim = KickAnimAsset->LoadSkeletalAnimation(RiggedSkeletalMesh, 0, SkeletalAnimConfig);
+		UE_LOG(LogTemplateCharacter, Log, TEXT("Kick animation: %s"), KickAnim ? TEXT("OK") : TEXT("FAIL"));
+	}
+	if (PunchAnimAsset)
+	{
+		PunchAnim = PunchAnimAsset->LoadSkeletalAnimation(RiggedSkeletalMesh, 0, SkeletalAnimConfig);
+		UE_LOG(LogTemplateCharacter, Log, TEXT("Punch animation: %s"), PunchAnim ? TEXT("OK") : TEXT("FAIL"));
+	}
 
 	// Step 2b: Hardcoded per-animation scale corrections.
 	// Meshy animation GLBs bake slightly different scales into keyframe data.
@@ -736,6 +859,10 @@ void Afal3DDemoCharacter::UpdateMovementAnimation()
 	{
 		NewState = ERuntimeMovementState::Walk;
 	}
+	else if (bSprintHeld && Speed > 400.f)
+	{
+		NewState = ERuntimeMovementState::Sprint;
+	}
 	else
 	{
 		NewState = ERuntimeMovementState::Run;
@@ -762,6 +889,9 @@ void Afal3DDemoCharacter::UpdateMovementAnimation()
 		case ERuntimeMovementState::Run:
 			AnimToPlay = RunAnim ? RunAnim : WalkAnim;
 			break;
+		case ERuntimeMovementState::Sprint:
+			AnimToPlay = SprintAnim ? SprintAnim : (RunAnim ? RunAnim : WalkAnim);
+			break;
 		case ERuntimeMovementState::Jump:
 			AnimToPlay = JumpAnim ? JumpAnim : IdleAnim;
 			bLoop = false;
@@ -781,6 +911,7 @@ void Afal3DDemoCharacter::UpdateMovementAnimation()
 				ScaleForAnim *= WalkScaleCorrection;
 				break;
 			case ERuntimeMovementState::Run:
+			case ERuntimeMovementState::Sprint:
 				ScaleForAnim *= RunScaleCorrection;
 				break;
 			case ERuntimeMovementState::Jump:
@@ -805,4 +936,45 @@ void Afal3DDemoCharacter::UpdateMovementAnimation()
 			}
 		}
 	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Sprint & Combat
+
+void Afal3DDemoCharacter::OnSprintStarted()
+{
+	bSprintHeld = true;
+}
+
+void Afal3DDemoCharacter::OnSprintEnded()
+{
+	bSprintHeld = false;
+}
+
+void Afal3DDemoCharacter::PlayCombatAnimation(UAnimSequence* Anim)
+{
+	if (!Anim || !RiggedMeshComp || !bUsingRiggedCharacter || bPanelVisible) return;
+
+	bPlayingCombatAnim = true;
+	CombatAnimTimeRemaining = Anim->GetPlayLength();
+	CurrentPlayingAnim = Anim;
+	RiggedMeshComp->SetRelativeScale3D(FVector(BaseComputedScale * 1.10f));
+	RiggedMeshComp->PlayAnimation(Anim, false);
+
+	UE_LOG(LogTemplateCharacter, Log, TEXT("Combat anim: %s (%.2fs)"), *Anim->GetName(), CombatAnimTimeRemaining);
+}
+
+void Afal3DDemoCharacter::OnPunchPressed()
+{
+	if (PunchAnim) PlayCombatAnimation(PunchAnim);
+}
+
+void Afal3DDemoCharacter::OnKickPressed()
+{
+	if (KickAnim) PlayCombatAnimation(KickAnim);
+}
+
+void Afal3DDemoCharacter::OnBoxingPressed()
+{
+	if (BoxingAnim) PlayCombatAnimation(BoxingAnim);
 }

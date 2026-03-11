@@ -29,6 +29,10 @@ struct FRiggedCharacterUrls
 	FString IdleAnimGlbUrl;
 	FString JumpAnimGlbUrl;
 	FString FallAnimGlbUrl;
+	FString SprintAnimGlbUrl;
+	FString BoxingAnimGlbUrl;
+	FString KickAnimGlbUrl;
+	FString PunchAnimGlbUrl;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnRiggingComplete, const FRiggedCharacterUrls&, Urls, const FString&, Error);

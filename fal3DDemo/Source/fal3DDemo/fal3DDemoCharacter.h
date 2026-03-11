@@ -25,6 +25,7 @@ enum class ERuntimeMovementState : uint8
 	Idle,
 	Walk,
 	Run,
+	Sprint,
 	Jump,
 	Fall
 };
@@ -130,6 +131,18 @@ private:
 	UPROPERTY()
 	UglTFRuntimeAsset* FallAnimAsset;
 
+	UPROPERTY()
+	UglTFRuntimeAsset* SprintAnimAsset;
+
+	UPROPERTY()
+	UglTFRuntimeAsset* BoxingAnimAsset;
+
+	UPROPERTY()
+	UglTFRuntimeAsset* KickAnimAsset;
+
+	UPROPERTY()
+	UglTFRuntimeAsset* PunchAnimAsset;
+
 	// Extracted after all assets loaded
 	UPROPERTY()
 	USkeletalMesh* RiggedSkeletalMesh;
@@ -149,11 +162,49 @@ private:
 	UPROPERTY()
 	UAnimSequence* FallAnim;
 
+	UPROPERTY()
+	UAnimSequence* SprintAnim;
+
+	UPROPERTY()
+	UAnimSequence* BoxingAnim;
+
+	UPROPERTY()
+	UAnimSequence* KickAnim;
+
+	UPROPERTY()
+	UAnimSequence* PunchAnim;
+
 	int32 PendingDownloads = 0;
 	int32 CompletedDownloads = 0;
 	bool bUsingRiggedCharacter = false;
 	ERuntimeMovementState CurrentMovementState = ERuntimeMovementState::Idle;
 	UAnimSequence* CurrentPlayingAnim = nullptr;
+
+	// Sprint
+	bool bSprintHeld = false;
+
+	// Combat animations (one-shot, play once and return to movement)
+	bool bPlayingCombatAnim = false;
+	float CombatAnimTimeRemaining = 0.f;
+	void PlayCombatAnimation(UAnimSequence* Anim);
+
+	// Runtime input actions (created in code, no editor setup needed)
+	UPROPERTY()
+	UInputAction* SprintInputAction;
+	UPROPERTY()
+	UInputAction* PunchInputAction;
+	UPROPERTY()
+	UInputAction* KickInputAction;
+	UPROPERTY()
+	UInputAction* BoxingInputAction;
+	UPROPERTY()
+	UInputMappingContext* CombatMappingContext;
+
+	void OnSprintStarted();
+	void OnSprintEnded();
+	void OnPunchPressed();
+	void OnKickPressed();
+	void OnBoxingPressed();
 
 	// Per-animation scale correction (ratio vs idle skeleton)
 	float BaseComputedScale = 1.f;
@@ -196,4 +247,16 @@ private:
 
 	UFUNCTION()
 	void OnFallAnimLoaded(UglTFRuntimeAsset* Asset);
+
+	UFUNCTION()
+	void OnSprintAnimLoaded(UglTFRuntimeAsset* Asset);
+
+	UFUNCTION()
+	void OnBoxingAnimLoaded(UglTFRuntimeAsset* Asset);
+
+	UFUNCTION()
+	void OnKickAnimLoaded(UglTFRuntimeAsset* Asset);
+
+	UFUNCTION()
+	void OnPunchAnimLoaded(UglTFRuntimeAsset* Asset);
 };

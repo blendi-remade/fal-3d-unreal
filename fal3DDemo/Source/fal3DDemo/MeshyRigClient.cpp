@@ -265,7 +265,8 @@ void UMeshyRigClient::SubmitAnimations()
 
 	// All animations from Animation API for consistent bone scaling:
 	// idle (0), walk (30=Casual_Walk), run (14=Run_02), jump (466=Regular_Jump)
-	TArray<int32> ActionIds = { 0, 30, 14, 466 };
+	// sprint (16=RunFast), boxing (87=Boxing_Practice), kick (94=Flying_Fist_Kick), punch (96=Kung_Fu_Punch)
+	TArray<int32> ActionIds = { 0, 30, 14, 466, 16, 87, 94, 96 };
 	for (int32 ActionId : ActionIds)
 	{
 		FAnimTask Task;
@@ -437,6 +438,10 @@ void UMeshyRigClient::OnAnimationPollResponse(FHttpRequestPtr Request, FHttpResp
 		else if (ActionId == 30) ResultUrls.WalkAnimGlbUrl = GlbUrl;
 		else if (ActionId == 14) ResultUrls.RunAnimGlbUrl = GlbUrl;
 		else if (ActionId == 466) ResultUrls.JumpAnimGlbUrl = GlbUrl;
+		else if (ActionId == 16) ResultUrls.SprintAnimGlbUrl = GlbUrl;
+		else if (ActionId == 87) ResultUrls.BoxingAnimGlbUrl = GlbUrl;
+		else if (ActionId == 94) ResultUrls.KickAnimGlbUrl = GlbUrl;
+		else if (ActionId == 96) ResultUrls.PunchAnimGlbUrl = GlbUrl;
 
 		if (AllAnimationsComplete())
 		{
