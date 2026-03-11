@@ -743,6 +743,9 @@ void Afal3DDemoCharacter::UpdateMovementAnimation()
 
 	if (NewState != CurrentMovementState)
 	{
+		UE_LOG(LogTemplateCharacter, Warning, TEXT("Movement: %d -> %d (speed=%.1f velZ=%.1f falling=%d)"),
+			(int)CurrentMovementState, (int)NewState, Speed, GetCharacterMovement()->Velocity.Z, bFalling);
+
 		CurrentMovementState = NewState;
 
 		UAnimSequence* AnimToPlay = nullptr;
@@ -788,7 +791,18 @@ void Afal3DDemoCharacter::UpdateMovementAnimation()
 				break; // Idle uses base scale
 			}
 			RiggedMeshComp->SetRelativeScale3D(FVector(ScaleForAnim));
-			RiggedMeshComp->PlayAnimation(AnimToPlay, bLoop);
+
+			// Don't restart the same animation (e.g. Jump→Fall both use JumpAnim)
+			if (CurrentPlayingAnim != AnimToPlay)
+			{
+				UE_LOG(LogTemplateCharacter, Warning, TEXT("  -> Playing %s (loop=%d)"), *AnimToPlay->GetName(), bLoop);
+				RiggedMeshComp->PlayAnimation(AnimToPlay, bLoop);
+				CurrentPlayingAnim = AnimToPlay;
+			}
+			else
+			{
+				UE_LOG(LogTemplateCharacter, Warning, TEXT("  -> SKIPPED (same anim already playing)"));
+			}
 		}
 	}
 }

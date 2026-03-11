@@ -153,6 +153,7 @@ private:
 	int32 CompletedDownloads = 0;
 	bool bUsingRiggedCharacter = false;
 	ERuntimeMovementState CurrentMovementState = ERuntimeMovementState::Idle;
+	UAnimSequence* CurrentPlayingAnim = nullptr;
 
 	// Per-animation scale correction (ratio vs idle skeleton)
 	float BaseComputedScale = 1.f;
