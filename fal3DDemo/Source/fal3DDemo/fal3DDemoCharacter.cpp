@@ -358,6 +358,9 @@ void Afal3DDemoCharacter::ShowPanel()
 	GeneratorWidget->AddToViewport(10);
 	bPanelVisible = true;
 
+	// Refresh dropdown now that widget is constructed
+	RefreshWidgetCharacterList();
+
 	if (APlayerController* PC = Cast<APlayerController>(Controller))
 	{
 		PC->bShowMouseCursor = true;
