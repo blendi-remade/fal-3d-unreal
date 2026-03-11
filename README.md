@@ -1,4 +1,4 @@
-# fal-3d-unreal
+# Prompt-to-Player for Unreal Engine - Powered by fal.ai
 
 Generate 3D characters from text prompts inside Unreal Engine 5, auto-rig and animate them, then **play as them** in real-time. Type "Son Goku" and within minutes you're running, jumping, sprinting, and fighting as a fully animated Goku in a third-person game.
 
