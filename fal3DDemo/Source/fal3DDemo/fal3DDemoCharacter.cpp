@@ -27,6 +27,8 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+#include "HAL/FileManager.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -63,56 +65,126 @@ Afal3DDemoCharacter::Afal3DDemoCharacter()
 
 FString Afal3DDemoCharacter::GetCacheFilePath() const
 {
-	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("LastGeneratedCharacter.json"));
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("CharacterHistory.json"));
 }
 
-void Afal3DDemoCharacter::SaveUrlsToCache(const FRiggedCharacterUrls& Urls)
+void Afal3DDemoCharacter::SaveToHistory(const FString& Name, const FRiggedCharacterUrls& Urls)
 {
-	TSharedPtr<FJsonObject> Json = MakeShareable(new FJsonObject());
-	Json->SetStringField(TEXT("RiggedGlbUrl"), Urls.RiggedGlbUrl);
-	Json->SetStringField(TEXT("WalkAnimGlbUrl"), Urls.WalkAnimGlbUrl);
-	Json->SetStringField(TEXT("RunAnimGlbUrl"), Urls.RunAnimGlbUrl);
-	Json->SetStringField(TEXT("IdleAnimGlbUrl"), Urls.IdleAnimGlbUrl);
-	Json->SetStringField(TEXT("JumpAnimGlbUrl"), Urls.JumpAnimGlbUrl);
-	Json->SetStringField(TEXT("SprintAnimGlbUrl"), Urls.SprintAnimGlbUrl);
-	Json->SetStringField(TEXT("BoxingAnimGlbUrl"), Urls.BoxingAnimGlbUrl);
-	Json->SetStringField(TEXT("KickAnimGlbUrl"), Urls.KickAnimGlbUrl);
-	Json->SetStringField(TEXT("PunchAnimGlbUrl"), Urls.PunchAnimGlbUrl);
+	// Add to front, remove duplicates with same name
+	CharacterHistory.RemoveAll([&](const FSavedCharacter& C) { return C.Name == Name; });
+	FSavedCharacter Entry;
+	Entry.Name = Name;
+	Entry.Urls = Urls;
+	CharacterHistory.Insert(Entry, 0);
+
+	// Keep max 5
+	while (CharacterHistory.Num() > 5)
+	{
+		CharacterHistory.RemoveAt(CharacterHistory.Num() - 1);
+	}
+
+	SaveHistory();
+	RefreshWidgetCharacterList();
+}
+
+void Afal3DDemoCharacter::SaveHistory()
+{
+	TArray<TSharedPtr<FJsonValue>> JsonArray;
+	for (const FSavedCharacter& Entry : CharacterHistory)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShareable(new FJsonObject());
+		Obj->SetStringField(TEXT("Name"), Entry.Name);
+		Obj->SetStringField(TEXT("RiggedGlbUrl"), Entry.Urls.RiggedGlbUrl);
+		Obj->SetStringField(TEXT("WalkAnimGlbUrl"), Entry.Urls.WalkAnimGlbUrl);
+		Obj->SetStringField(TEXT("RunAnimGlbUrl"), Entry.Urls.RunAnimGlbUrl);
+		Obj->SetStringField(TEXT("IdleAnimGlbUrl"), Entry.Urls.IdleAnimGlbUrl);
+		Obj->SetStringField(TEXT("JumpAnimGlbUrl"), Entry.Urls.JumpAnimGlbUrl);
+		Obj->SetStringField(TEXT("SprintAnimGlbUrl"), Entry.Urls.SprintAnimGlbUrl);
+		Obj->SetStringField(TEXT("BoxingAnimGlbUrl"), Entry.Urls.BoxingAnimGlbUrl);
+		Obj->SetStringField(TEXT("KickAnimGlbUrl"), Entry.Urls.KickAnimGlbUrl);
+		Obj->SetStringField(TEXT("PunchAnimGlbUrl"), Entry.Urls.PunchAnimGlbUrl);
+		JsonArray.Add(MakeShareable(new FJsonValueObject(Obj)));
+	}
 
 	FString Output;
 	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
-	FJsonSerializer::Serialize(Json.ToSharedRef(), Writer);
+	FJsonSerializer::Serialize(JsonArray, Writer);
 	FFileHelper::SaveStringToFile(Output, *GetCacheFilePath());
-	UE_LOG(LogTemplateCharacter, Log, TEXT("Cached character URLs to %s"), *GetCacheFilePath());
+	UE_LOG(LogTemplateCharacter, Log, TEXT("Saved %d characters to history"), CharacterHistory.Num());
 }
 
-bool Afal3DDemoCharacter::LoadUrlsFromCache(FRiggedCharacterUrls& OutUrls)
+void Afal3DDemoCharacter::LoadHistory()
 {
+	CharacterHistory.Empty();
+
 	FString FileContents;
 	if (!FFileHelper::LoadFileToString(FileContents, *GetCacheFilePath()))
 	{
-		return false;
+		return;
 	}
 
-	TSharedPtr<FJsonObject> Json;
+	TArray<TSharedPtr<FJsonValue>> JsonArray;
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(FileContents);
-	if (!FJsonSerializer::Deserialize(Reader, Json) || !Json.IsValid())
+	if (!FJsonSerializer::Deserialize(Reader, JsonArray))
 	{
-		return false;
+		return;
 	}
 
-	OutUrls.RiggedGlbUrl = Json->GetStringField(TEXT("RiggedGlbUrl"));
-	OutUrls.WalkAnimGlbUrl = Json->GetStringField(TEXT("WalkAnimGlbUrl"));
-	OutUrls.RunAnimGlbUrl = Json->GetStringField(TEXT("RunAnimGlbUrl"));
-	OutUrls.IdleAnimGlbUrl = Json->GetStringField(TEXT("IdleAnimGlbUrl"));
-	OutUrls.JumpAnimGlbUrl = Json->GetStringField(TEXT("JumpAnimGlbUrl"));
-	OutUrls.SprintAnimGlbUrl = Json->GetStringField(TEXT("SprintAnimGlbUrl"));
-	OutUrls.BoxingAnimGlbUrl = Json->GetStringField(TEXT("BoxingAnimGlbUrl"));
-	OutUrls.KickAnimGlbUrl = Json->GetStringField(TEXT("KickAnimGlbUrl"));
-	OutUrls.PunchAnimGlbUrl = Json->GetStringField(TEXT("PunchAnimGlbUrl"));
+	for (const TSharedPtr<FJsonValue>& Val : JsonArray)
+	{
+		const TSharedPtr<FJsonObject>* Obj;
+		if (!Val->TryGetObject(Obj)) continue;
 
-	return !OutUrls.RiggedGlbUrl.IsEmpty();
+		FSavedCharacter Entry;
+		Entry.Name = (*Obj)->GetStringField(TEXT("Name"));
+		Entry.Urls.RiggedGlbUrl = (*Obj)->GetStringField(TEXT("RiggedGlbUrl"));
+		Entry.Urls.WalkAnimGlbUrl = (*Obj)->GetStringField(TEXT("WalkAnimGlbUrl"));
+		Entry.Urls.RunAnimGlbUrl = (*Obj)->GetStringField(TEXT("RunAnimGlbUrl"));
+		Entry.Urls.IdleAnimGlbUrl = (*Obj)->GetStringField(TEXT("IdleAnimGlbUrl"));
+		Entry.Urls.JumpAnimGlbUrl = (*Obj)->GetStringField(TEXT("JumpAnimGlbUrl"));
+		Entry.Urls.SprintAnimGlbUrl = (*Obj)->GetStringField(TEXT("SprintAnimGlbUrl"));
+		Entry.Urls.BoxingAnimGlbUrl = (*Obj)->GetStringField(TEXT("BoxingAnimGlbUrl"));
+		Entry.Urls.KickAnimGlbUrl = (*Obj)->GetStringField(TEXT("KickAnimGlbUrl"));
+		Entry.Urls.PunchAnimGlbUrl = (*Obj)->GetStringField(TEXT("PunchAnimGlbUrl"));
+		CharacterHistory.Add(Entry);
+	}
+
+	UE_LOG(LogTemplateCharacter, Log, TEXT("Loaded %d characters from history"), CharacterHistory.Num());
 }
+
+void Afal3DDemoCharacter::ClearHistory()
+{
+	CharacterHistory.Empty();
+	IFileManager::Get().Delete(*GetCacheFilePath());
+	RefreshWidgetCharacterList();
+	UE_LOG(LogTemplateCharacter, Log, TEXT("Character history cleared"));
+}
+
+void Afal3DDemoCharacter::RefreshWidgetCharacterList()
+{
+	if (!GeneratorWidget) return;
+
+	TArray<FString> Names;
+	for (const FSavedCharacter& Entry : CharacterHistory)
+	{
+		Names.Add(Entry.Name);
+	}
+	GeneratorWidget->SetCharacterList(Names);
+}
+
+void Afal3DDemoCharacter::OnCharacterLoadRequested(int32 Index)
+{
+	if (Index >= 0 && Index < CharacterHistory.Num())
+	{
+		UE_LOG(LogTemplateCharacter, Log, TEXT("Loading saved character: %s"), *CharacterHistory[Index].Name);
+		if (GeneratorWidget)
+		{
+			GeneratorWidget->UpdateStatus(FString::Printf(TEXT("Loading %s..."), *CharacterHistory[Index].Name));
+		}
+		StartLoadingRiggedAssets(CharacterHistory[Index].Urls);
+	}
+}
+
 
 void Afal3DDemoCharacter::BeginPlay()
 {
@@ -131,7 +203,12 @@ void Afal3DDemoCharacter::BeginPlay()
 	{
 		GeneratorWidget->OnGenerateRequested.AddDynamic(this, &Afal3DDemoCharacter::OnGenerateRequested);
 		GeneratorWidget->OnCloseRequested.AddDynamic(this, &Afal3DDemoCharacter::OnCloseRequested);
+		GeneratorWidget->OnCharacterLoadRequested.AddDynamic(this, &Afal3DDemoCharacter::OnCharacterLoadRequested);
 	}
+
+	// Load saved character history and populate dropdown
+	LoadHistory();
+	RefreshWidgetCharacterList();
 
 	// Create runtime input actions for sprint and combat (no editor setup needed)
 	SprintInputAction = NewObject<UInputAction>(this);
@@ -169,13 +246,7 @@ void Afal3DDemoCharacter::BeginPlay()
 		EIC->BindAction(BoxingInputAction, ETriggerEvent::Started, this, &Afal3DDemoCharacter::OnBoxingPressed);
 	}
 
-	// Auto-load previously generated character if cached URLs exist
-	FRiggedCharacterUrls CachedUrls;
-	if (LoadUrlsFromCache(CachedUrls))
-	{
-		UE_LOG(LogTemplateCharacter, Log, TEXT("Found cached character, auto-loading..."));
-		StartLoadingRiggedAssets(CachedUrls);
-	}
+	// Characters are now loaded on-demand from the widget dropdown (no auto-load)
 }
 
 void Afal3DDemoCharacter::Tick(float DeltaTime)
@@ -315,6 +386,7 @@ void Afal3DDemoCharacter::OnGenerateRequested(const FString& Prompt)
 {
 	if (FalClient)
 	{
+		LastGenerationPrompt = Prompt;
 		GeneratorWidget->SetGenerateEnabled(false);
 		FalClient->GenerateModel(Prompt);
 	}
@@ -441,8 +513,8 @@ void Afal3DDemoCharacter::OnRiggingComplete(const FRiggedCharacterUrls& Urls, co
 		GeneratorWidget->UpdateStatus(TEXT("Downloading rigged character..."));
 	}
 
-	// Cache URLs so the character auto-loads on next play session
-	SaveUrlsToCache(Urls);
+	// Save to character history for the dropdown
+	SaveToHistory(LastGenerationPrompt.IsEmpty() ? TEXT("Generated Character") : LastGenerationPrompt, Urls);
 
 	StartLoadingRiggedAssets(Urls);
 }

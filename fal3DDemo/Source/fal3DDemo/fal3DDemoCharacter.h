@@ -225,10 +225,25 @@ private:
 	void ExtractAndSwapCharacter();
 	void UpdateMovementAnimation();
 
-	// URL caching for persistence across play sessions
-	void SaveUrlsToCache(const FRiggedCharacterUrls& Urls);
-	bool LoadUrlsFromCache(FRiggedCharacterUrls& OutUrls);
+	// Character history (up to 5 saved generations)
+	struct FSavedCharacter
+	{
+		FString Name;
+		FRiggedCharacterUrls Urls;
+	};
+	TArray<FSavedCharacter> CharacterHistory;
+
+	void SaveToHistory(const FString& Name, const FRiggedCharacterUrls& Urls);
+	void LoadHistory();
+	void SaveHistory();
+	void ClearHistory();
 	FString GetCacheFilePath() const;
+	void RefreshWidgetCharacterList();
+
+	FString LastGenerationPrompt;
+
+	UFUNCTION()
+	void OnCharacterLoadRequested(int32 Index);
 
 	UFUNCTION()
 	void OnRiggedGlbLoaded(UglTFRuntimeAsset* Asset);

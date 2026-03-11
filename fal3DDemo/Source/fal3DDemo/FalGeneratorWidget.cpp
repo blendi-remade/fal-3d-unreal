@@ -14,6 +14,7 @@
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/CheckBox.h"
+#include "Components/ComboBoxString.h"
 #include "Blueprint/WidgetTree.h"
 #include "Engine/Texture2D.h"
 #include "Logging/LogMacros.h"
@@ -190,6 +191,32 @@ void UFalGeneratorWidget::NativeConstruct()
 	UVerticalBoxSlot* Sep2Slot = VBox->AddChildToVerticalBox(Sep2);
 	Sep2Slot->SetHorizontalAlignment(HAlign_Fill);
 	Sep2Slot->SetPadding(FMargin(0.f, 2.f, 0.f, 3.f));
+
+	// ── Saved Characters — chevron-only dropdown, auto-loads on selection ──
+	UHorizontalBox* HistoryRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HistoryRow"));
+	UVerticalBoxSlot* HistRowSlot = VBox->AddChildToVerticalBox(HistoryRow);
+	HistRowSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 2.f));
+
+	UTextBlock* HistoryLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HistoryLabel"));
+	HistoryLabel->SetText(FText::FromString(TEXT("Saved Characters")));
+	HistoryLabel->SetFont(TinyFont);
+	HistoryLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.45f, 0.45f, 0.45f)));
+	UHorizontalBoxSlot* HistLabelSlot = HistoryRow->AddChildToHorizontalBox(HistoryLabel);
+	HistLabelSlot->SetVerticalAlignment(VAlign_Center);
+	HistLabelSlot->SetPadding(FMargin(0.f, 0.f, 4.f, 0.f));
+
+	CharacterDropdown = WidgetTree->ConstructWidget<UComboBoxString>(UComboBoxString::StaticClass(), TEXT("CharacterDropdown"));
+	CharacterDropdown->SetContentPadding(FMargin(0.f, 0.f));
+	CharacterDropdown->OnSelectionChanged.AddDynamic(this, &UFalGeneratorWidget::OnCharacterSelected);
+
+	// Wrap in a tiny SizeBox so only the chevron arrow is visible
+	USizeBox* DropdownSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("DropdownSizeBox"));
+	DropdownSizeBox->SetWidthOverride(24.f);
+	DropdownSizeBox->SetHeightOverride(20.f);
+	DropdownSizeBox->AddChild(CharacterDropdown);
+
+	UHorizontalBoxSlot* DropSlot = HistoryRow->AddChildToHorizontalBox(DropdownSizeBox);
+	DropSlot->SetVerticalAlignment(VAlign_Center);
 
 	// ── Log header label ──
 	UTextBlock* LogLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("LogLabel"));
@@ -368,4 +395,30 @@ void UFalGeneratorWidget::OnGenerateClicked()
 void UFalGeneratorWidget::OnCloseClicked()
 {
 	OnCloseRequested.Broadcast();
+}
+
+void UFalGeneratorWidget::SetCharacterList(const TArray<FString>& Names)
+{
+	if (!CharacterDropdown) return;
+
+	CharacterDropdown->ClearOptions();
+	for (const FString& Name : Names)
+	{
+		CharacterDropdown->AddOption(Name);
+	}
+	// Don't auto-select — dropdown shows empty (just chevron) until user clicks
+	CharacterDropdown->ClearSelection();
+}
+
+void UFalGeneratorWidget::OnCharacterSelected(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	if (!CharacterDropdown || SelectionType == ESelectInfo::Direct) return;
+
+	int32 Index = CharacterDropdown->GetSelectedIndex();
+	if (Index >= 0)
+	{
+		OnCharacterLoadRequested.Broadcast(Index);
+		// Clear selection so dropdown shows empty (just chevron) again
+		CharacterDropdown->ClearSelection();
+	}
 }

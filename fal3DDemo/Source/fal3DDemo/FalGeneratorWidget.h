@@ -11,9 +11,11 @@ class UButton;
 class UImage;
 class UScrollBox;
 class USizeBox;
+class UComboBoxString;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGenerateRequested, const FString&, Prompt);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnFalPanelCloseRequested);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterLoadRequested, int32, Index);
 
 UCLASS()
 class FAL3DDEMO_API UFalGeneratorWidget : public UUserWidget
@@ -27,9 +29,13 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnFalPanelCloseRequested OnCloseRequested;
 
+	UPROPERTY(BlueprintAssignable)
+	FOnCharacterLoadRequested OnCharacterLoadRequested;
+
 	void UpdateStatus(const FString& Message);
 	void SetGenerateEnabled(bool bEnabled);
 	void AddLogLine(const FString& Line);
+	void SetCharacterList(const TArray<FString>& Names);
 
 protected:
 	virtual void NativeConstruct() override;
@@ -76,6 +82,12 @@ private:
 
 	UFUNCTION()
 	void OnCloseClicked();
+
+	UFUNCTION()
+	void OnCharacterSelected(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UPROPERTY()
+	UComboBoxString* CharacterDropdown;
 
 	// Log line storage
 	TArray<FString> LogLines;
