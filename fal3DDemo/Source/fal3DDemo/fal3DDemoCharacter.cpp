@@ -202,6 +202,7 @@ void Afal3DDemoCharacter::BeginPlay()
 	if (GeneratorWidget)
 	{
 		GeneratorWidget->OnGenerateRequested.AddDynamic(this, &Afal3DDemoCharacter::OnGenerateRequested);
+		GeneratorWidget->OnImageGenerateRequested.AddDynamic(this, &Afal3DDemoCharacter::OnImageGenerateRequested);
 		GeneratorWidget->OnCloseRequested.AddDynamic(this, &Afal3DDemoCharacter::OnCloseRequested);
 		GeneratorWidget->OnCharacterLoadRequested.AddDynamic(this, &Afal3DDemoCharacter::OnCharacterLoadRequested);
 	}
@@ -392,6 +393,16 @@ void Afal3DDemoCharacter::OnGenerateRequested(const FString& Prompt)
 		LastGenerationPrompt = Prompt;
 		GeneratorWidget->SetGenerateEnabled(false);
 		FalClient->GenerateModel(Prompt);
+	}
+}
+
+void Afal3DDemoCharacter::OnImageGenerateRequested(const FString& ImagePath)
+{
+	if (FalClient)
+	{
+		LastGenerationPrompt = FPaths::GetBaseFilename(ImagePath);
+		GeneratorWidget->SetGenerateEnabled(false);
+		FalClient->GenerateModelFromImage(ImagePath);
 	}
 }
 

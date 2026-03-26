@@ -40,8 +40,10 @@ fal3DDemo/UpgradeLog.htm
 fal3DDemo/Content/StarterContent/
 fal3DDemo/Content/Characters/
 
-# Marketplace content packs (too large for git, install locally)
+# Marketplace/Fab content packs (too large for git, install locally)
 fal3DDemo/Content/Stylized_PBR_Nature/
+fal3DDemo/Content/UtopianCity/
+fal3DDemo/Liscenses.rtf
 
 # OS files
 Thumbs.db
