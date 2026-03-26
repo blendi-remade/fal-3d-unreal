@@ -19,6 +19,12 @@
 #include "Engine/Texture2D.h"
 #include "Logging/LogMacros.h"
 #include "Styling/AppStyle.h"
+#include "DesktopPlatformModule.h"
+#include "Misc/Paths.h"
+#include "Misc/FileHelper.h"
+#include "Framework/Application/SlateApplication.h"
+#include "IImageWrapperModule.h"
+#include "IImageWrapper.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogFalWidget, Log, All);
 
@@ -74,7 +80,7 @@ void UFalGeneratorWidget::NativeConstruct()
 	UCanvasPanelSlot* BgSlot = RootCanvas->AddChildToCanvas(Background);
 	BgSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
 	BgSlot->SetAlignment(FVector2D(0.5f, 0.5f));
-	BgSlot->SetSize(FVector2D(400.f, 420.f));
+	BgSlot->SetSize(FVector2D(400.f, 620.f));
 	BgSlot->SetPosition(FVector2D(0.f, 0.f));
 
 	// Single vertical box (flat structure — proven to work)
@@ -140,6 +146,59 @@ void UFalGeneratorWidget::NativeConstruct()
 	UVerticalBoxSlot* InputSlot = VBox->AddChildToVerticalBox(PromptInput);
 	InputSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
 
+	// ── Image browse row: [Browse Image] [filename] [X] ──
+	UHorizontalBox* ImageRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ImageRow"));
+	UVerticalBoxSlot* ImageRowSlot = VBox->AddChildToVerticalBox(ImageRow);
+	ImageRowSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
+
+	BrowseImageButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("BrowseImageButton"));
+	BrowseImageButton->SetStyle(FAppStyle::Get().GetWidgetStyle<FButtonStyle>("Button"));
+	BrowseImageButton->OnClicked.AddDynamic(this, &UFalGeneratorWidget::OnBrowseImageClicked);
+
+	UTextBlock* BrowseBtnText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BrowseBtnText"));
+	BrowseBtnText->SetText(FText::FromString(TEXT("Browse Image")));
+	BrowseBtnText->SetFont(SmallFont);
+	BrowseBtnText->SetColorAndOpacity(FSlateColor(FLinearColor(0.75f, 0.75f, 0.75f)));
+	BrowseImageButton->AddChild(BrowseBtnText);
+
+	UHorizontalBoxSlot* BrowseBtnSlot = ImageRow->AddChildToHorizontalBox(BrowseImageButton);
+	BrowseBtnSlot->SetVerticalAlignment(VAlign_Center);
+	BrowseBtnSlot->SetPadding(FMargin(0.f, 0.f, 6.f, 0.f));
+	BrowseBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+
+	ImageFileText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ImageFileText"));
+	ImageFileText->SetText(FText::FromString(TEXT("No image (text-to-3D)")));
+	ImageFileText->SetFont(TinyFont);
+	ImageFileText->SetColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)));
+	ImageFileText->SetAutoWrapText(false);
+	UHorizontalBoxSlot* ImageTextSlot = ImageRow->AddChildToHorizontalBox(ImageFileText);
+	ImageTextSlot->SetVerticalAlignment(VAlign_Center);
+	ImageTextSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+
+	ClearImageButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ClearImageButton"));
+	ClearImageButton->SetStyle(FAppStyle::Get().GetWidgetStyle<FButtonStyle>("Button"));
+	ClearImageButton->OnClicked.AddDynamic(this, &UFalGeneratorWidget::OnClearImageClicked);
+	ClearImageButton->SetVisibility(ESlateVisibility::Collapsed);
+
+	UTextBlock* ClearBtnText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ClearBtnText"));
+	ClearBtnText->SetText(FText::FromString(TEXT("X")));
+	ClearBtnText->SetFont(SmallFont);
+	ClearBtnText->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.3f, 0.3f)));
+	ClearImageButton->AddChild(ClearBtnText);
+
+	UHorizontalBoxSlot* ClearBtnSlot = ImageRow->AddChildToHorizontalBox(ClearImageButton);
+	ClearBtnSlot->SetVerticalAlignment(VAlign_Center);
+	ClearBtnSlot->SetPadding(FMargin(4.f, 0.f, 0.f, 0.f));
+	ClearBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+
+	// ── Image preview (hidden until an image is selected) ──
+	ImagePreview = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("ImagePreview"));
+	ImagePreview->SetDesiredSizeOverride(FVector2D(256.f, 256.f));
+	ImagePreview->SetVisibility(ESlateVisibility::Collapsed);
+	UVerticalBoxSlot* PreviewSlot = VBox->AddChildToVerticalBox(ImagePreview);
+	PreviewSlot->SetHorizontalAlignment(HAlign_Center);
+	PreviewSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
+
 	// ── T-pose checkbox ──
 	UHorizontalBox* TPoseRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("TPoseRow"));
 	UVerticalBoxSlot* TPoseRowSlot = VBox->AddChildToVerticalBox(TPoseRow);
@@ -163,14 +222,14 @@ void UFalGeneratorWidget::NativeConstruct()
 	GenerateButton->SetStyle(FAppStyle::Get().GetWidgetStyle<FButtonStyle>("Button"));
 	GenerateButton->OnClicked.AddDynamic(this, &UFalGeneratorWidget::OnGenerateClicked);
 
-	UTextBlock* BtnText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("GenerateBtnText"));
-	BtnText->SetText(FText::FromString(TEXT("Generate 3D Model")));
+	GenerateButtonText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("GenerateBtnText"));
+	GenerateButtonText->SetText(FText::FromString(TEXT("Generate 3D Model")));
 	FSlateFontInfo BtnFont = NormalFont;
 	BtnFont.Size = 11;
-	BtnText->SetFont(BtnFont);
-	BtnText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-	BtnText->SetJustification(ETextJustify::Center);
-	GenerateButton->AddChild(BtnText);
+	GenerateButtonText->SetFont(BtnFont);
+	GenerateButtonText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	GenerateButtonText->SetJustification(ETextJustify::Center);
+	GenerateButton->AddChild(GenerateButtonText);
 
 	UVerticalBoxSlot* GenBtnSlot = VBox->AddChildToVerticalBox(GenerateButton);
 	GenBtnSlot->SetHorizontalAlignment(HAlign_Fill);
@@ -346,6 +405,14 @@ void UFalGeneratorWidget::SetGenerateEnabled(bool bEnabled)
 	{
 		GenerateButton->SetIsEnabled(bEnabled);
 	}
+	if (BrowseImageButton)
+	{
+		BrowseImageButton->SetIsEnabled(bEnabled);
+	}
+	if (ClearImageButton)
+	{
+		ClearImageButton->SetIsEnabled(bEnabled);
+	}
 }
 
 void UFalGeneratorWidget::AddLogLine(const FString& Line)
@@ -375,8 +442,31 @@ void UFalGeneratorWidget::RefreshLogText()
 	}
 }
 
+void UFalGeneratorWidget::UpdateGenerateButtonLabel()
+{
+	if (!GenerateButtonText) return;
+
+	if (SelectedImagePath.IsEmpty())
+	{
+		GenerateButtonText->SetText(FText::FromString(TEXT("Generate 3D Model")));
+	}
+	else
+	{
+		GenerateButtonText->SetText(FText::FromString(TEXT("Generate from Image")));
+	}
+}
+
 void UFalGeneratorWidget::OnGenerateClicked()
 {
+	if (!SelectedImagePath.IsEmpty())
+	{
+		// Image-to-3D mode
+		AddLogLine(FString::Printf(TEXT("Generating from image: \"%s\""), *FPaths::GetCleanFilename(SelectedImagePath)));
+		OnImageGenerateRequested.Broadcast(SelectedImagePath);
+		return;
+	}
+
+	// Text-to-3D mode (original flow)
 	if (PromptInput)
 	{
 		FString Prompt = PromptInput->GetText().ToString();
@@ -395,6 +485,122 @@ void UFalGeneratorWidget::OnGenerateClicked()
 void UFalGeneratorWidget::OnCloseClicked()
 {
 	OnCloseRequested.Broadcast();
+}
+
+void UFalGeneratorWidget::OnBrowseImageClicked()
+{
+	IDesktopPlatform* DesktopPlatform = FDesktopPlatformModule::Get();
+	if (!DesktopPlatform) return;
+
+	// Get the native window handle for the file dialog parent
+	void* ParentWindowHandle = nullptr;
+	if (FSlateApplication::IsInitialized())
+	{
+		TSharedPtr<SWindow> TopWindow = FSlateApplication::Get().GetActiveTopLevelWindow();
+		if (TopWindow.IsValid())
+		{
+			ParentWindowHandle = TopWindow->GetNativeWindow()->GetOSWindowHandle();
+		}
+	}
+
+	TArray<FString> OutFiles;
+	bool bOpened = DesktopPlatform->OpenFileDialog(
+		ParentWindowHandle,
+		TEXT("Select Character Image"),
+		FPaths::ProjectDir(),
+		TEXT(""),
+		TEXT("Image Files (*.png, *.jpg, *.jpeg, *.webp)|*.png;*.jpg;*.jpeg;*.webp|All Files (*.*)|*.*"),
+		0,
+		OutFiles
+	);
+
+	if (bOpened && OutFiles.Num() > 0)
+	{
+		SelectedImagePath = OutFiles[0];
+
+		if (ImageFileText)
+		{
+			ImageFileText->SetText(FText::FromString(FPaths::GetCleanFilename(SelectedImagePath)));
+			ImageFileText->SetColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f)));
+		}
+
+		if (ClearImageButton)
+		{
+			ClearImageButton->SetVisibility(ESlateVisibility::Visible);
+		}
+
+		// Load image preview
+		TArray<uint8> FileData;
+		if (FFileHelper::LoadFileToArray(FileData, *SelectedImagePath))
+		{
+			IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+			EImageFormat Format = EImageFormat::PNG;
+			FString Ext = FPaths::GetExtension(SelectedImagePath).ToLower();
+			if (Ext == TEXT("jpg") || Ext == TEXT("jpeg")) Format = EImageFormat::JPEG;
+
+			TSharedPtr<IImageWrapper> ImageWrapper = ImageWrapperModule.CreateImageWrapper(Format);
+			if (ImageWrapper.IsValid() && ImageWrapper->SetCompressed(FileData.GetData(), FileData.Num()))
+			{
+				TArray<uint8> RawData;
+				if (ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, RawData))
+				{
+					int32 W = ImageWrapper->GetWidth();
+					int32 H = ImageWrapper->GetHeight();
+					PreviewTexture = UTexture2D::CreateTransient(W, H, PF_B8G8R8A8);
+					if (PreviewTexture)
+					{
+						void* TextureData = PreviewTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+						FMemory::Memcpy(TextureData, RawData.GetData(), RawData.Num());
+						PreviewTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
+						PreviewTexture->UpdateResource();
+
+						if (ImagePreview)
+						{
+							ImagePreview->SetBrushFromTexture(PreviewTexture, false);
+							FSlateBrush Brush;
+							Brush.SetResourceObject(PreviewTexture);
+							Brush.ImageSize = FVector2D(256.f, 256.f);
+							Brush.DrawAs = ESlateBrushDrawType::Image;
+							ImagePreview->SetBrush(Brush);
+							ImagePreview->SetVisibility(ESlateVisibility::Visible);
+						}
+					}
+				}
+			}
+		}
+
+		// Disable prompt and T-pose when image is selected
+		if (PromptInput) PromptInput->SetIsEnabled(false);
+		if (TPoseCheckBox) TPoseCheckBox->SetIsEnabled(false);
+
+		UpdateGenerateButtonLabel();
+		AddLogLine(FString::Printf(TEXT("Image selected: %s"), *FPaths::GetCleanFilename(SelectedImagePath)));
+	}
+}
+
+void UFalGeneratorWidget::OnClearImageClicked()
+{
+	SelectedImagePath.Empty();
+
+	if (ImageFileText)
+	{
+		ImageFileText->SetText(FText::FromString(TEXT("No image (text-to-3D)")));
+		ImageFileText->SetColorAndOpacity(FSlateColor(FLinearColor(0.4f, 0.4f, 0.4f)));
+	}
+
+	if (ClearImageButton)
+	{
+		ClearImageButton->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	// Hide preview and re-enable prompt and T-pose when image is cleared
+	if (ImagePreview) ImagePreview->SetVisibility(ESlateVisibility::Collapsed);
+	PreviewTexture = nullptr;
+	if (PromptInput) PromptInput->SetIsEnabled(true);
+	if (TPoseCheckBox) TPoseCheckBox->SetIsEnabled(true);
+
+	UpdateGenerateButtonLabel();
+	AddLogLine(TEXT("Image cleared, switched to text-to-3D mode"));
 }
 
 void UFalGeneratorWidget::SetCharacterList(const TArray<FString>& Names)

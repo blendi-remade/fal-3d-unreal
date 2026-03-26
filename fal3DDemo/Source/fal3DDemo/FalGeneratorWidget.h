@@ -14,6 +14,7 @@ class USizeBox;
 class UComboBoxString;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGenerateRequested, const FString&, Prompt);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnImageGenerateRequested, const FString&, ImagePath);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnFalPanelCloseRequested);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterLoadRequested, int32, Index);
 
@@ -25,6 +26,9 @@ class FAL3DDEMO_API UFalGeneratorWidget : public UUserWidget
 public:
 	UPROPERTY(BlueprintAssignable)
 	FOnGenerateRequested OnGenerateRequested;
+
+	UPROPERTY(BlueprintAssignable)
+	FOnImageGenerateRequested OnImageGenerateRequested;
 
 	UPROPERTY(BlueprintAssignable)
 	FOnFalPanelCloseRequested OnCloseRequested;
@@ -52,6 +56,9 @@ private:
 	UButton* GenerateButton;
 
 	UPROPERTY()
+	UTextBlock* GenerateButtonText;
+
+	UPROPERTY()
 	UButton* CloseButton;
 
 	UPROPERTY()
@@ -69,6 +76,24 @@ private:
 	UPROPERTY()
 	UTexture2D* LogoTexture;
 
+	// Image browse controls
+	UPROPERTY()
+	UButton* BrowseImageButton;
+
+	UPROPERTY()
+	UButton* ClearImageButton;
+
+	UPROPERTY()
+	UTextBlock* ImageFileText;
+
+	UPROPERTY()
+	UImage* ImagePreview;
+
+	UPROPERTY()
+	UTexture2D* PreviewTexture;
+
+	FString SelectedImagePath;
+
 	bool bWidgetBuilt = false;
 	bool bSpinnerVisible = false;
 	float SpinnerAngle = 0.f;
@@ -84,6 +109,12 @@ private:
 	void OnCloseClicked();
 
 	UFUNCTION()
+	void OnBrowseImageClicked();
+
+	UFUNCTION()
+	void OnClearImageClicked();
+
+	UFUNCTION()
 	void OnCharacterSelected(FString SelectedItem, ESelectInfo::Type SelectionType);
 
 	UPROPERTY()
@@ -92,4 +123,6 @@ private:
 	// Log line storage
 	TArray<FString> LogLines;
 	void RefreshLogText();
+
+	void UpdateGenerateButtonLabel();
 };

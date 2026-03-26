@@ -13,6 +13,10 @@ enum class EFalGenerationState : uint8
 	Submitting,
 	Polling,
 	FetchingResult,
+	// Image preprocessing states
+	PreprocessingSubmitting,
+	PreprocessingPolling,
+	PreprocessingFetching,
 	Completed,
 	Error
 };
@@ -41,7 +45,11 @@ public:
 	// Texture URL from the last generation result
 	FString LastTextureUrl;
 
+	// Text-to-3D generation
 	void GenerateModel(const FString& Prompt);
+
+	// Image-to-3D generation (preprocesses with nano-banana-pro/edit first)
+	void GenerateModelFromImage(const FString& LocalImagePath);
 
 private:
 	FString ApiKey;
@@ -50,11 +58,22 @@ private:
 	FString ResponseUrl;
 	FTimerHandle PollTimerHandle;
 
-	static const FString BaseUrl;
+	// Preprocessing state (nano-banana-pro/edit)
+	FString PreprocessRequestId;
+	FString PreprocessStatusUrl;
+	FString PreprocessResponseUrl;
+	FTimerHandle PreprocessPollTimerHandle;
+
+	static const FString TextTo3DUrl;
+	static const FString ImageTo3DUrl;
+	static const FString NanoBananaEditUrl;
 
 	FString GetApiKey();
 	void SetState(EFalGenerationState NewState, const FString& Message = TEXT(""));
 
+	bool IsGenerating() const;
+
+	// Text-to-3D flow
 	void SubmitRequest(const FString& Prompt);
 	void OnSubmitResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
 
@@ -66,4 +85,21 @@ private:
 	void OnFetchResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
 
 	void StopPolling();
+
+	// Image preprocessing flow (nano-banana-pro/edit)
+	void SubmitPreprocessing(const FString& Base64DataUrl);
+	void OnPreprocessSubmitResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
+
+	void StartPreprocessPolling();
+	void PollPreprocessStatus();
+	void OnPreprocessPollResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
+
+	void FetchPreprocessResult();
+	void OnPreprocessFetchResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
+
+	void StopPreprocessPolling();
+
+	// Image-to-3D flow (uses same poll/fetch as text-to-3D after submit)
+	void SubmitImageTo3D(const FString& ImageUrl);
+	void OnImageTo3DSubmitResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
 };

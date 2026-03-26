@@ -13,7 +13,8 @@ public class fal3DDemo : ModuleRules
 			"HTTP", "Json", "JsonUtilities",
 			"UMG", "Slate", "SlateCore",
 			"glTFRuntime",
-			"ImageWrapper", "RenderCore"
+			"ImageWrapper", "RenderCore",
+			"DesktopPlatform"
 		});
 	}
 }

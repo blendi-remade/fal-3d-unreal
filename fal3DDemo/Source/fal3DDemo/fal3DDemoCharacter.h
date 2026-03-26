@@ -94,6 +94,9 @@ private:
 	void OnGenerateRequested(const FString& Prompt);
 
 	UFUNCTION()
+	void OnImageGenerateRequested(const FString& ImagePath);
+
+	UFUNCTION()
 	void OnCloseRequested();
 
 	UFUNCTION()
