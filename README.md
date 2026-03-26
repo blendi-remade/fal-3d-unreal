@@ -1,6 +1,6 @@
 # Prompt-to-Player for Unreal Engine - Powered by fal.ai
 
-Generate 3D characters from text prompts inside Unreal Engine 5, auto-rig and animate them, then **play as them**, all during runtime. Type "Son Goku" and within minutes you're running, jumping, sprinting, and fighting as a fully animated Goku in a third-person game.
+Generate 3D characters from text prompts or images inside Unreal Engine 5, auto-rig and animate them, then **play as them**, all during runtime. Type "Son Goku" or browse a photo of someone and within minutes you're running, jumping, sprinting, and fighting as a fully animated character in a third-person game.
 
 Built entirely in C++ with a programmatic UMG widget  - no Blueprint widgets needed.
 
@@ -10,6 +10,7 @@ Built entirely in C++ with a programmatic UMG widget  - no Blueprint widgets nee
 ## Features
 
 - **Text-to-3D generation** via [fal.ai Hunyuan 3D](https://fal.ai/models/fal-ai/hunyuan-3d/v3.1/pro/text-to-3d)  - generates a 3D mesh from any text prompt
+- **Image-to-3D generation** via [fal.ai Hunyuan 3D](https://fal.ai/models/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d)  - browse a photo and generate a 3D character from it. The image is first preprocessed through [nano-banana-pro/edit](https://fal.ai/models/fal-ai/nano-banana-pro/edit) to convert it into a clean A-pose with a neutral background, then passed to image-to-3D generation
 - **Auto-rigging and animation** via [Meshy API](https://docs.meshy.ai/api-rig-and-animate-3d-models)  - automatically rigs the generated mesh with a humanoid skeleton and generates walk, run, sprint, jump, and kick animations
 - **Real-time character swap**  - replaces the player character mesh with the generated model, complete with movement-driven animation
 - **Character history**  - saves your last 5 generated characters in a dropdown for instant loading across play sessions
@@ -25,6 +26,8 @@ Built entirely in C++ with a programmatic UMG widget  - no Blueprint widgets nee
 
 ## How It Works
 
+### Text-to-3D
+
 1. Press **P** to open the generator panel
 2. Type a text prompt (e.g. "Son Goku")
 3. Optionally check **T-pose** (helps with characters whose arms are close to their body)
@@ -36,6 +39,18 @@ Built entirely in C++ with a programmatic UMG widget  - no Blueprint widgets nee
    - All animation GLBs are downloaded in parallel
 6. Your character is automatically swapped  - you are now the generated character
 7. Press **P** to close the panel and play
+
+### Image-to-3D
+
+1. Press **P** to open the generator panel
+2. Click **Browse Image** and select a photo from your computer (PNG, JPG, or WEBP)
+3. A preview of the image appears in the panel. The prompt and T-pose controls are disabled since they only apply to text-to-3D
+4. Click **Generate from Image**
+5. The pipeline runs in three stages:
+   - The image is sent to nano-banana-pro/edit, which converts it into a clean A-pose on a white background
+   - The preprocessed image is passed to fal.ai Hunyuan 3D image-to-3D to generate the mesh
+   - From here the flow is the same as text-to-3D: Meshy rigs and animates, assets download in parallel, and you become the character
+6. Click the **X** button next to the filename to clear the image and switch back to text-to-3D mode
 
 ### Controls
 
@@ -65,7 +80,7 @@ The generated GLB is loaded at runtime using the [glTFRuntime](https://github.co
 
 ### Animation Pipeline
 
-1. **Generation**: fal.ai Hunyuan 3D creates a textured GLB mesh from the prompt
+1. **Generation**: fal.ai Hunyuan 3D creates a textured GLB mesh from a text prompt or a preprocessed image
 2. **Rigging**: Meshy API rigs the mesh with a humanoid skeleton (Hips, Spine, Arms, Legs, etc.)
 3. **Animation**: Meshy generates animation GLBs for each movement type using `action_id`:
    - `0`  - Idle
