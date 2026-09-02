@@ -25,6 +25,9 @@
 #include "Framework/Application/SlateApplication.h"
 #include "IImageWrapperModule.h"
 #include "IImageWrapper.h"
+#include "HttpModule.h"
+#include "Interfaces/IHttpRequest.h"
+#include "Interfaces/IHttpResponse.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogFalWidget, Log, All);
 
@@ -458,26 +461,26 @@ void UFalGeneratorWidget::UpdateGenerateButtonLabel()
 
 void UFalGeneratorWidget::OnGenerateClicked()
 {
+	const bool bTPose = TPoseCheckBox && TPoseCheckBox->IsChecked();
+	const TCHAR* PoseLabel = bTPose ? TEXT("T-pose") : TEXT("A-pose");
+
 	if (!SelectedImagePath.IsEmpty())
 	{
 		// Image-to-3D mode
-		AddLogLine(FString::Printf(TEXT("Generating from image: \"%s\""), *FPaths::GetCleanFilename(SelectedImagePath)));
-		OnImageGenerateRequested.Broadcast(SelectedImagePath);
+		AddLogLine(FString::Printf(TEXT("Generating from image: \"%s\" (%s)"), *FPaths::GetCleanFilename(SelectedImagePath), PoseLabel));
+		OnImageGenerateRequested.Broadcast(SelectedImagePath, bTPose);
 		return;
 	}
 
-	// Text-to-3D mode (original flow)
+	// Text-to-3D mode: the concept image will replace whatever preview is showing
+	HidePreviewImage();
 	if (PromptInput)
 	{
-		FString Prompt = PromptInput->GetText().ToString();
+		const FString Prompt = PromptInput->GetText().ToString().TrimStartAndEnd();
 		if (!Prompt.IsEmpty())
 		{
-			if (TPoseCheckBox && TPoseCheckBox->IsChecked())
-			{
-				Prompt += TEXT(" T-pose");
-			}
-			AddLogLine(FString::Printf(TEXT("Generating: \"%s\""), *Prompt));
-			OnGenerateRequested.Broadcast(Prompt);
+			AddLogLine(FString::Printf(TEXT("Generating: \"%s\" (%s)"), *Prompt, PoseLabel));
+			OnGenerateRequested.Broadcast(Prompt, bTPose);
 		}
 	}
 }
@@ -509,7 +512,7 @@ void UFalGeneratorWidget::OnBrowseImageClicked()
 		TEXT("Select Character Image"),
 		FPaths::ProjectDir(),
 		TEXT(""),
-		TEXT("Image Files (*.png, *.jpg, *.jpeg, *.webp)|*.png;*.jpg;*.jpeg;*.webp|All Files (*.*)|*.*"),
+		TEXT("Image Files (*.png, *.jpg, *.jpeg)|*.png;*.jpg;*.jpeg"),
 		0,
 		OutFiles
 	);
@@ -533,45 +536,13 @@ void UFalGeneratorWidget::OnBrowseImageClicked()
 		TArray<uint8> FileData;
 		if (FFileHelper::LoadFileToArray(FileData, *SelectedImagePath))
 		{
-			IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
-			EImageFormat Format = EImageFormat::PNG;
-			FString Ext = FPaths::GetExtension(SelectedImagePath).ToLower();
-			if (Ext == TEXT("jpg") || Ext == TEXT("jpeg")) Format = EImageFormat::JPEG;
-
-			TSharedPtr<IImageWrapper> ImageWrapper = ImageWrapperModule.CreateImageWrapper(Format);
-			if (ImageWrapper.IsValid() && ImageWrapper->SetCompressed(FileData.GetData(), FileData.Num()))
-			{
-				TArray<uint8> RawData;
-				if (ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, RawData))
-				{
-					int32 W = ImageWrapper->GetWidth();
-					int32 H = ImageWrapper->GetHeight();
-					PreviewTexture = UTexture2D::CreateTransient(W, H, PF_B8G8R8A8);
-					if (PreviewTexture)
-					{
-						void* TextureData = PreviewTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
-						FMemory::Memcpy(TextureData, RawData.GetData(), RawData.Num());
-						PreviewTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
-						PreviewTexture->UpdateResource();
-
-						if (ImagePreview)
-						{
-							ImagePreview->SetBrushFromTexture(PreviewTexture, false);
-							FSlateBrush Brush;
-							Brush.SetResourceObject(PreviewTexture);
-							Brush.ImageSize = FVector2D(256.f, 256.f);
-							Brush.DrawAs = ESlateBrushDrawType::Image;
-							ImagePreview->SetBrush(Brush);
-							ImagePreview->SetVisibility(ESlateVisibility::Visible);
-						}
-					}
-				}
-			}
+			const FString Ext = FPaths::GetExtension(SelectedImagePath).ToLower();
+			const EImageFormat Format = (Ext == TEXT("jpg") || Ext == TEXT("jpeg")) ? EImageFormat::JPEG : EImageFormat::PNG;
+			ApplyPreviewImage(FileData, Format);
 		}
 
-		// Disable prompt and T-pose when image is selected
+		// Disable the text prompt while an image is selected (T-pose still applies to image-to-3D)
 		if (PromptInput) PromptInput->SetIsEnabled(false);
-		if (TPoseCheckBox) TPoseCheckBox->SetIsEnabled(false);
 
 		UpdateGenerateButtonLabel();
 		AddLogLine(FString::Printf(TEXT("Image selected: %s"), *FPaths::GetCleanFilename(SelectedImagePath)));
@@ -593,11 +564,9 @@ void UFalGeneratorWidget::OnClearImageClicked()
 		ClearImageButton->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
-	// Hide preview and re-enable prompt and T-pose when image is cleared
-	if (ImagePreview) ImagePreview->SetVisibility(ESlateVisibility::Collapsed);
-	PreviewTexture = nullptr;
+	// Hide preview and re-enable the text prompt
+	HidePreviewImage();
 	if (PromptInput) PromptInput->SetIsEnabled(true);
-	if (TPoseCheckBox) TPoseCheckBox->SetIsEnabled(true);
 
 	UpdateGenerateButtonLabel();
 	AddLogLine(TEXT("Image cleared, switched to text-to-3D mode"));
@@ -627,4 +596,86 @@ void UFalGeneratorWidget::OnCharacterSelected(FString SelectedItem, ESelectInfo:
 		// Clear selection so dropdown shows empty (just chevron) again
 		CharacterDropdown->ClearSelection();
 	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Preview image helpers
+
+bool UFalGeneratorWidget::ApplyPreviewImage(const TArray<uint8>& CompressedData, EImageFormat Format)
+{
+	IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+	TSharedPtr<IImageWrapper> ImageWrapper = ImageWrapperModule.CreateImageWrapper(Format);
+	if (!ImageWrapper.IsValid() || !ImageWrapper->SetCompressed(CompressedData.GetData(), CompressedData.Num()))
+	{
+		UE_LOG(LogFalWidget, Warning, TEXT("Preview image: could not decode %d bytes"), CompressedData.Num());
+		return false;
+	}
+
+	TArray<uint8> RawData;
+	if (!ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, RawData))
+	{
+		return false;
+	}
+
+	const int32 W = ImageWrapper->GetWidth();
+	const int32 H = ImageWrapper->GetHeight();
+	PreviewTexture = UTexture2D::CreateTransient(W, H, PF_B8G8R8A8);
+	if (!PreviewTexture)
+	{
+		return false;
+	}
+
+	void* TextureData = PreviewTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+	FMemory::Memcpy(TextureData, RawData.GetData(), RawData.Num());
+	PreviewTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
+	PreviewTexture->UpdateResource();
+
+	if (ImagePreview)
+	{
+		// Fit inside a 256px box while keeping the image's aspect ratio.
+		const float Scale = 256.f / FMath::Max(W, H);
+		FSlateBrush Brush;
+		Brush.SetResourceObject(PreviewTexture);
+		Brush.ImageSize = FVector2D(W * Scale, H * Scale);
+		Brush.DrawAs = ESlateBrushDrawType::Image;
+		ImagePreview->SetBrush(Brush);
+		ImagePreview->SetDesiredSizeOverride(Brush.ImageSize);
+		ImagePreview->SetVisibility(ESlateVisibility::Visible);
+	}
+	return true;
+}
+
+void UFalGeneratorWidget::HidePreviewImage()
+{
+	if (ImagePreview)
+	{
+		ImagePreview->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	PreviewTexture = nullptr;
+}
+
+void UFalGeneratorWidget::ShowImagePreviewFromUrl(const FString& Url)
+{
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Http = FHttpModule::Get().CreateRequest();
+	Http->SetURL(Url);
+	Http->SetVerb(TEXT("GET"));
+	Http->OnProcessRequestComplete().BindWeakLambda(this,
+		[this](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
+		{
+			if (!bConnected || !Response.IsValid() || Response->GetResponseCode() != 200)
+			{
+				UE_LOG(LogFalWidget, Warning, TEXT("Preview image download failed"));
+				return;
+			}
+
+			const FString ContentType = Response->GetContentType().ToLower();
+			const EImageFormat Format = ContentType.Contains(TEXT("jpeg")) || ContentType.Contains(TEXT("jpg"))
+				? EImageFormat::JPEG : EImageFormat::PNG;
+
+			if (ApplyPreviewImage(Response->GetContent(), Format))
+			{
+				AddLogLine(TEXT("Concept image received"));
+			}
+		});
+	Http->ProcessRequest();
 }

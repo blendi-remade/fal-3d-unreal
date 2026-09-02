@@ -6,7 +6,7 @@
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
 #include "FalApiClient.h"
-#include "MeshyRigClient.h"
+#include "FalRigClient.h"
 #include "fal3DDemoCharacter.generated.h"
 
 class USpringArmComponent;
@@ -82,7 +82,7 @@ private:
 	UFalApiClient* FalClient;
 
 	UPROPERTY()
-	UMeshyRigClient* MeshyClient;
+	UFalRigClient* RigClient;
 
 	bool bPanelVisible = false;
 
@@ -91,10 +91,10 @@ private:
 	void HidePanel();
 
 	UFUNCTION()
-	void OnGenerateRequested(const FString& Prompt);
+	void OnGenerateRequested(const FString& Prompt, bool bTPose);
 
 	UFUNCTION()
-	void OnImageGenerateRequested(const FString& ImagePath);
+	void OnImageGenerateRequested(const FString& ImagePath, bool bTPose);
 
 	UFUNCTION()
 	void OnCloseRequested();
@@ -106,11 +106,14 @@ private:
 	void OnGenerationComplete(const FString& GlbUrl, const FString& Error);
 
 	UFUNCTION()
+	void OnConceptImageReady(const FString& ImageUrl);
+
+	UFUNCTION()
 	void OnGlbAssetLoaded(UglTFRuntimeAsset* Asset);
 
-	// Meshy rigging
+	// Rigging + animation (Meshy via fal.ai)
 	UFUNCTION()
-	void OnRigStateChanged(EMeshyRigState NewState);
+	void OnRigStateChanged(EFalRigState NewState);
 
 	UFUNCTION()
 	void OnRiggingComplete(const FRiggedCharacterUrls& Urls, const FString& Error);

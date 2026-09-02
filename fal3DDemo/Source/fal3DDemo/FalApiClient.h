@@ -2,9 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
-#include "Interfaces/IHttpRequest.h"
-#include "Interfaces/IHttpResponse.h"
 #include "FalApiClient.generated.h"
+
+class UFalQueueRequest;
+class FJsonObject;
 
 UENUM(BlueprintType)
 enum class EFalGenerationState : uint8
@@ -12,18 +13,25 @@ enum class EFalGenerationState : uint8
 	Idle,
 	Submitting,
 	Polling,
-	FetchingResult,
-	// Image preprocessing states
-	PreprocessingSubmitting,
-	PreprocessingPolling,
-	PreprocessingFetching,
 	Completed,
 	Error
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnGenerationComplete, const FString&, GlbUrl, const FString&, Error);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGenerationStateChanged, EFalGenerationState, NewState);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnConceptImageReady, const FString&, ImageUrl);
 
+/**
+ * Generates a textured, rig-friendly 3D character through the fal.ai queue.
+ *
+ *   Text  : fal-ai/nano-banana-2  ->  meshy/v7/image-to-3d
+ *           The text prompt is first turned into a clean front-facing concept image in an
+ *           explicit A-pose or T-pose on a white background. Image conditioning gives Meshy a
+ *           far stronger pose signal than text alone, which is what the auto-rigger needs.
+ *   Image : meshy/v7/image-to-3d  (user-supplied photo, sent as a data URI)
+ *
+ * Both paths also pass Meshy's pose_mode so the mesh comes out in the requested pose.
+ */
 UCLASS()
 class FAL3DDEMO_API UFalApiClient : public UObject
 {
@@ -36,70 +44,55 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnGenerationStateChanged OnStateChanged;
 
+	// Fired on the text path once the concept image exists, before the 3D step starts.
+	UPROPERTY(BlueprintAssignable)
+	FOnConceptImageReady OnConceptImageReady;
+
 	UPROPERTY(BlueprintReadOnly)
 	EFalGenerationState CurrentState = EFalGenerationState::Idle;
 
 	UPROPERTY(BlueprintReadOnly)
 	FString StatusMessage;
 
-	// Texture URL from the last generation result
-	FString LastTextureUrl;
-
-	// Text-to-3D generation
-	void GenerateModel(const FString& Prompt);
-
-	// Image-to-3D generation (preprocesses with nano-banana-pro/edit first)
-	void GenerateModelFromImage(const FString& LocalImagePath);
-
-private:
-	FString ApiKey;
-	FString RequestId;
-	FString StatusUrl;
-	FString ResponseUrl;
-	FTimerHandle PollTimerHandle;
-
-	// Preprocessing state (nano-banana-pro/edit)
-	FString PreprocessRequestId;
-	FString PreprocessStatusUrl;
-	FString PreprocessResponseUrl;
-	FTimerHandle PreprocessPollTimerHandle;
-
-	static const FString TextTo3DUrl;
-	static const FString ImageTo3DUrl;
-	static const FString NanoBananaEditUrl;
-
-	FString GetApiKey();
-	void SetState(EFalGenerationState NewState, const FString& Message = TEXT(""));
+	void GenerateModel(const FString& Prompt, bool bTPose);
+	void GenerateModelFromImage(const FString& LocalImagePath, bool bTPose);
 
 	bool IsGenerating() const;
 
-	// Text-to-3D flow
-	void SubmitRequest(const FString& Prompt);
-	void OnSubmitResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
+private:
+	UPROPERTY()
+	UFalQueueRequest* Request = nullptr;
 
-	void StartPolling();
-	void PollStatus();
-	void OnPollResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
+	static const FString ConceptImageUrl;
+	static const FString ImageTo3DUrl;
 
-	void FetchResult();
-	void OnFetchResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
+	// Mesh quality knobs.
+	static const int32 TargetPolycount;
+	static const bool bUltraMode;
+	static const bool bEnablePbr;
 
-	void StopPolling();
+	// Pose requested for the run currently in flight (needed across the two text-path stages).
+	bool bPendingTPose = false;
 
-	// Image preprocessing flow (nano-banana-pro/edit)
-	void SubmitPreprocessing(const FString& Base64DataUrl);
-	void OnPreprocessSubmitResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
+	// Shown in front of progress messages, e.g. "Designing character" / "Generating 3D model".
+	FString StageLabel;
 
-	void StartPreprocessPolling();
-	void PollPreprocessStatus();
-	void OnPreprocessPollResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
+	// Validates the API key and in-progress state, creating the request object on first use.
+	bool BeginRequest();
 
-	void FetchPreprocessResult();
-	void OnPreprocessFetchResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
+	static FString BuildConceptPrompt(const FString& CharacterPrompt, bool bTPose);
+	void AddMeshSettings(const TSharedRef<FJsonObject>& Body, bool bTPose) const;
 
-	void StopPreprocessPolling();
+	// Stage 1 (text path): concept image.
+	void SubmitConceptImage(const FString& Prompt);
+	void HandleConceptResult(TSharedPtr<FJsonObject> Result, const FString& Error);
 
-	// Image-to-3D flow (uses same poll/fetch as text-to-3D after submit)
-	void SubmitImageTo3D(const FString& ImageUrl);
-	void OnImageTo3DSubmitResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully);
+	// Stage 2 (both paths): image -> 3D. ImageUrl may be an https URL or a data URI.
+	void SubmitImageTo3D(const FString& ImageUrl, const FString& SubmitMessage);
+	void HandleModelResult(TSharedPtr<FJsonObject> Result, const FString& Error);
+
+	void HandleProgress(const FString& Message);
+
+	void SetState(EFalGenerationState NewState, const FString& Message);
+	void Fail(const FString& Error);
 };

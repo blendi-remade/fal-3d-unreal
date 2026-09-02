@@ -1,6 +1,8 @@
 # Prompt-to-Player for Unreal Engine - Powered by fal.ai
 
-Generate 3D characters from text prompts or images inside Unreal Engine 5, auto-rig and animate them, then **play as them**, all during runtime. Type "Son Goku" or browse a photo of someone and within minutes you're running, jumping, sprinting, and fighting as a fully animated character in a third-person game.
+Generate 3D characters from text prompts or images inside Unreal Engine 5, auto-rig and animate them, then **play as them**, all during runtime. Type a character description or browse a photo of someone and within minutes you're running, jumping, sprinting, and fighting as a fully animated character in a third-person game.
+
+The whole pipeline runs on [fal.ai](https://fal.ai) with a single API key: nano-banana-2 for a pose-controlled concept image, Meshy-7 for the mesh, and Meshy rigging + animation through fal for the character rig.
 
 Built entirely in C++ with a programmatic UMG widget  - no Blueprint widgets needed.
 
@@ -9,17 +11,15 @@ Built entirely in C++ with a programmatic UMG widget  - no Blueprint widgets nee
 
 ## Features
 
-- **Text-to-3D generation** via [fal.ai Hunyuan 3D](https://fal.ai/models/fal-ai/hunyuan-3d/v3.1/pro/text-to-3d)  - generates a 3D mesh from any text prompt
-- **Image-to-3D generation** via [fal.ai Hunyuan 3D](https://fal.ai/models/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d)  - browse a photo and generate a 3D character from it. The image is first preprocessed through [nano-banana-pro/edit](https://fal.ai/models/fal-ai/nano-banana-pro/edit) to convert it into a clean A-pose with a neutral background, then passed to image-to-3D generation
-- **Auto-rigging and animation** via [Meshy API](https://docs.meshy.ai/api-rig-and-animate-3d-models)  - automatically rigs the generated mesh with a humanoid skeleton and generates walk, run, sprint, jump, and kick animations
+- **Text-to-3D generation**  - the prompt is first rendered by [nano-banana-2](https://fal.ai/models/fal-ai/nano-banana-2) into a clean, front-facing concept image in an explicit A-pose or T-pose on white, then [Meshy-7 image-to-3D](https://fal.ai/models/meshy/v7/image-to-3d) turns that into a fully textured mesh (ultra mode, 100k target polycount). Image conditioning gives a much more reliable rig-friendly pose than text-to-3D alone, and you see the concept in the panel before the 3D step starts
+- **Image-to-3D generation** via [Meshy-7 on fal.ai](https://fal.ai/models/meshy/v7/image-to-3d)  - browse a photo and generate a 3D character from it. Meshy's native `pose_mode` puts the subject into a rig-friendly A-pose or T-pose, so no separate image preprocessing step is needed
+- **Auto-rigging and animation** via [fal-ai/meshy/rigging/multi-animation](https://fal.ai/models/fal-ai/meshy/rigging/multi-animation)  - one request rigs the mesh with a humanoid skeleton and generates all 8 animation clips (idle, walk, run, sprint, jump, boxing, kick, punch)
 - **Real-time character swap**  - replaces the player character mesh with the generated model, complete with movement-driven animation
 - **Character history**  - saves your last 5 generated characters in a dropdown for instant loading across play sessions
-- **Sprint and combat**  - hold Shift to sprint, press F for a flying kick
-- **T-pose option**  - checkbox to generate characters in T-pose for cleaner rigging (recommended when arms are close to the torso, which can cause limb-blending artifacts during animation)
+- **Sprint and combat**  - hold Shift to sprint, press F for a flying kick, V for boxing, left mouse for a punch
+- **Pose control**  - characters are generated in A-pose by default; check **T-pose** for characters whose arms sit close to the torso (avoids limb-blending artifacts during animation). Works for both text and image input
 - **Native Unreal editor styling**  - the in-game panel uses `FAppStyle` brushes, fonts, and button styles to look like a built-in Unreal editor panel
 - **Fully programmatic UI**  - the entire widget is constructed in C++ using `WidgetTree->ConstructWidget<>()`, no UMG designer or Blueprint assets
-
-> **Note:** fal.ai is currently integrating the Meshy rigging and animation API directly into the fal platform. Once complete, the entire pipeline (generation + rigging + animation) will be unified under a single fal.ai API call. This project will be updated to use the unified API when available.
 
 <!-- Widget screenshot: replace with a screenshot of the generator panel -->
 ![Widget](docs/widget.png)
@@ -29,27 +29,25 @@ Built entirely in C++ with a programmatic UMG widget  - no Blueprint widgets nee
 ### Text-to-3D
 
 1. Press **P** to open the generator panel
-2. Type a text prompt (e.g. "Son Goku")
+2. Type a text prompt (e.g. "a stocky dwarven blacksmith with a braided beard")
 3. Optionally check **T-pose** (helps with characters whose arms are close to their body)
 4. Click **Generate 3D Model**
-5. Wait while the pipeline runs (~2-4 minutes):
-   - fal.ai generates the 3D mesh
+5. Wait while the pipeline runs (several minutes; the panel shows live progress):
+   - nano-banana-2 renders a front-facing concept image in the requested pose. It appears in the panel as soon as it's ready
+   - Meshy-7 image-to-3D generates and textures the mesh from that image
    - A static preview spawns in front of your character
-   - Meshy rigs the mesh and generates 6 animations (idle, walk, run, sprint, jump, kick)
-   - All animation GLBs are downloaded in parallel
+   - fal's multi-animation endpoint rigs the mesh and generates 8 animation clips (idle, walk, run, sprint, jump, boxing, kick, punch)
+   - All GLBs are downloaded in parallel
 6. Your character is automatically swapped  - you are now the generated character
 7. Press **P** to close the panel and play
 
 ### Image-to-3D
 
 1. Press **P** to open the generator panel
-2. Click **Browse Image** and select a photo from your computer (PNG, JPG, or WEBP)
-3. A preview of the image appears in the panel. The prompt and T-pose controls are disabled since they only apply to text-to-3D
+2. Click **Browse Image** and select a photo from your computer (PNG or JPG)
+3. A preview of the image appears in the panel. The text prompt is disabled; the T-pose checkbox still applies
 4. Click **Generate from Image**
-5. The pipeline runs in three stages:
-   - The image is sent to nano-banana-pro/edit, which converts it into a clean A-pose on a white background
-   - The preprocessed image is passed to fal.ai Hunyuan 3D image-to-3D to generate the mesh
-   - From here the flow is the same as text-to-3D: Meshy rigs and animates, assets download in parallel, and you become the character
+5. The image is sent as a base64 data URI to Meshy-7 image-to-3D with `pose_mode` set to A-pose (or T-pose). From there the flow is the same as text-to-3D: rig and animate, download in parallel, and you become the character
 6. Click the **X** button next to the filename to clear the image and switch back to text-to-3D mode
 
 ### Controls
@@ -61,6 +59,8 @@ Built entirely in C++ with a programmatic UMG widget  - no Blueprint widgets nee
 | **Space** | Jump |
 | **Left Shift** (hold) | Sprint |
 | **F** | Flying fist kick |
+| **V** | Boxing combo |
+| **Left mouse** | Kung fu punch |
 | **Mouse** | Look around |
 
 ### Saved Characters
@@ -71,8 +71,9 @@ The dropdown in the generator panel shows your last 5 generated characters. Clic
 
 | Class | Role |
 |-------|------|
-| `UFalApiClient` | HTTP client for fal.ai queue API (submit, poll, fetch result) |
-| `UMeshyRigClient` | HTTP client for Meshy rigging + animation API (rig, animate, poll) |
+| `UFalQueueRequest` | One submit / poll / fetch cycle against the fal.ai queue API. Loads `FAL_KEY`, surfaces fal's real error messages, shows Meshy's live progress logs |
+| `UFalApiClient` | Text path: nano-banana-2 concept image then Meshy-7 image-to-3D. Image path: Meshy-7 image-to-3D directly |
+| `UFalRigClient` | Single `meshy/rigging/multi-animation` request that rigs the GLB and returns all animation clips |
 | `UFalGeneratorWidget` | Programmatic UMG panel with editor styling, log viewer, character history |
 | `Afal3DDemoCharacter` | Owns all clients + widget, handles character swap, movement animation, sprint, combat |
 
@@ -80,17 +81,18 @@ The generated GLB is loaded at runtime using the [glTFRuntime](https://github.co
 
 ### Animation Pipeline
 
-1. **Generation**: fal.ai Hunyuan 3D creates a textured GLB mesh from a text prompt or a preprocessed image
-2. **Rigging**: Meshy API rigs the mesh with a humanoid skeleton (Hips, Spine, Arms, Legs, etc.)
-3. **Animation**: Meshy generates animation GLBs for each movement type using `action_id`:
+1. **Generation**: for text, nano-banana-2 produces a pose-controlled concept image; that image (or your own photo) goes to Meshy-7 image-to-3D, which creates a textured GLB mesh in A-pose or T-pose
+2. **Rigging + Animation**: one call to `fal-ai/meshy/rigging/multi-animation` rigs the mesh with a humanoid skeleton and generates a GLB per Meshy animation-library `action_id`:
    - `0`  - Idle
    - `30`  - Casual Walk
    - `14`  - Run
    - `16`  - Fast Run (Sprint)
    - `466`  - Regular Jump
+   - `87`  - Boxing Practice
    - `94`  - Flying Fist Kick
-4. **Extraction**: glTFRuntime loads each GLB, extracts the skeletal mesh and `UAnimSequence` assets at runtime
-5. **Playback**: The character's `UpdateMovementAnimation()` checks velocity and input state each tick, switching animations based on movement
+   - `96`  - Kung Fu Punch
+3. **Extraction**: glTFRuntime loads each GLB, extracts the skeletal mesh and `UAnimSequence` assets at runtime
+4. **Playback**: The character's `UpdateMovementAnimation()` checks velocity and input state each tick, switching animations based on movement
 
 ### Known Quirks
 
@@ -101,8 +103,7 @@ The generated GLB is loaded at runtime using the [glTFRuntime](https://github.co
 ## Prerequisites
 
 - **Unreal Engine 5.5**
-- A **fal.ai API key**  - get one at [fal.ai/dashboard/keys](https://fal.ai/dashboard/keys)
-- A **Meshy API key**  - get one at [meshy.ai/api](https://www.meshy.ai/api)
+- A **fal.ai API key**  - get one at [fal.ai/dashboard/keys](https://fal.ai/dashboard/keys). This is the only key you need; Meshy runs through fal
 
 ## Setup
 
@@ -123,20 +124,17 @@ The repo excludes large stock assets (StarterContent, Characters) to keep the re
    - `Characters/`
    - `StarterContent/`
 
-### 3. Set your API keys
+### 3. Set your API key
 
 Create a `.env` file in the `fal3DDemo/` folder:
 
 ```
 FAL_KEY=your-fal-api-key-here
-MESHY_KEY=your-meshy-api-key-here
 ```
 
-See `.env.example` for reference. The code also supports setting `FAL_KEY` and `MESHY_KEY` as OS environment variables as a fallback.
+See `.env.example` for reference. The code also falls back to a `FAL_KEY` OS environment variable.
 
-**Where to get the keys:**
-- **fal.ai**: Sign up at [fal.ai](https://fal.ai), then go to [Dashboard > Keys](https://fal.ai/dashboard/keys)
-- **Meshy**: Sign up at [meshy.ai](https://www.meshy.ai), then go to [API Settings](https://www.meshy.ai/api) to generate a key
+Sign up at [fal.ai](https://fal.ai), then create a key under [Dashboard > Keys](https://fal.ai/dashboard/keys).
 
 ### 4. Open the project
 
@@ -151,8 +149,9 @@ Click **Play** (or press Alt+P), then press **P** to open the generator panel.
 ```
 fal3DDemo/
   Source/fal3DDemo/
-    FalApiClient.h/.cpp        # fal.ai HTTP submit/poll/result pipeline
-    MeshyRigClient.h/.cpp      # Meshy rigging + animation API client
+    FalQueueRequest.h/.cpp     # Shared fal.ai queue client (submit/poll/fetch, API key, errors)
+    FalApiClient.h/.cpp        # nano-banana-2 concept image + Meshy-7 image-to-3D
+    FalRigClient.h/.cpp        # Meshy rigging + multi-animation via fal.ai
     FalGeneratorWidget.h/.cpp   # Programmatic UMG panel with editor styling
     fal3DDemoCharacter.h/.cpp   # Character: panel, swap, animations, sprint, combat
     fal3DDemo.Build.cs          # Module dependencies
@@ -164,16 +163,18 @@ fal3DDemo/
     UI/fal_logo.png             # fal.ai logo for the spinner
   Plugins/glTFRuntime/          # glTF/GLB runtime loader (submodule)
   Saved/CharacterHistory.json   # Cached character URLs (auto-generated)
-  .env                          # Your API keys (gitignored)
+  .env                          # Your fal.ai API key (gitignored)
   .env.example                  # Template for .env
 ```
 
 ## Troubleshooting
 
-- **"MESHY_KEY not found"**  - Make sure your `.env` file is in the `fal3DDemo/` directory (same level as `fal3DDemo.uproject`) and contains `MESHY_KEY=your-key`
+- **"FAL_KEY not found"**  - Make sure your `.env` file is in the `fal3DDemo/` directory (same level as `fal3DDemo.uproject`) and contains `FAL_KEY=your-key`
+- **"Generation failed: ... content checker"**  - fal's safety checker rejected the prompt or image. Trademarked character names are a common trigger; describe the character instead of naming it
 - **Character appears tiny or huge**  - The auto-scaling targets 180cm. If it looks wrong, check the logs for `computed scale` values. The scale correction constants in `ExtractAndSwapCharacter()` can be tuned.
 - **Animations look jerky when switching**  - This is the hard-cut animation switching (no blend). It's a known limitation.
 - **Arms blending into torso during animations**  - Try regenerating with the T-pose checkbox enabled
+- **Sword / staff / cape bends like rubber**  - The auto-rig skins props and loose cloth to nearby limb bones. Prompt for characters with no held props, tight clothing and a fused silhouette (armor, helmets, backpacks are fine)
 - **Widget not appearing**  - Make sure the `IA_TogglePanel` input action is bound to the **P** key in `IMC_Default` in the editor. Check the Output Log for `LogFalWidget` messages.
 - **Live Coding fails**  - If you changed `.h` files, you must close the editor and do a full rebuild. Live Coding (Ctrl+Alt+F11) only works for `.cpp`-only changes.
 

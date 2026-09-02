@@ -14,7 +14,7 @@
 #include "InputActionValue.h"
 #include "FalGeneratorWidget.h"
 #include "FalApiClient.h"
-#include "MeshyRigClient.h"
+#include "FalRigClient.h"
 #include "Blueprint/UserWidget.h"
 #include "glTFRuntimeFunctionLibrary.h"
 #include "glTFRuntimeAssetActor.h"
@@ -193,10 +193,11 @@ void Afal3DDemoCharacter::BeginPlay()
 	FalClient = NewObject<UFalApiClient>(this);
 	FalClient->OnGenerationComplete.AddDynamic(this, &Afal3DDemoCharacter::OnGenerationComplete);
 	FalClient->OnStateChanged.AddDynamic(this, &Afal3DDemoCharacter::OnGenerationStateChanged);
+	FalClient->OnConceptImageReady.AddDynamic(this, &Afal3DDemoCharacter::OnConceptImageReady);
 
-	MeshyClient = NewObject<UMeshyRigClient>(this);
-	MeshyClient->OnRiggingComplete.AddDynamic(this, &Afal3DDemoCharacter::OnRiggingComplete);
-	MeshyClient->OnStateChanged.AddDynamic(this, &Afal3DDemoCharacter::OnRigStateChanged);
+	RigClient = NewObject<UFalRigClient>(this);
+	RigClient->OnRiggingComplete.AddDynamic(this, &Afal3DDemoCharacter::OnRiggingComplete);
+	RigClient->OnStateChanged.AddDynamic(this, &Afal3DDemoCharacter::OnRigStateChanged);
 
 	GeneratorWidget = CreateWidget<UFalGeneratorWidget>(GetWorld()->GetFirstPlayerController(), UFalGeneratorWidget::StaticClass());
 	if (GeneratorWidget)
@@ -386,23 +387,23 @@ void Afal3DDemoCharacter::HidePanel()
 	}
 }
 
-void Afal3DDemoCharacter::OnGenerateRequested(const FString& Prompt)
+void Afal3DDemoCharacter::OnGenerateRequested(const FString& Prompt, bool bTPose)
 {
 	if (FalClient)
 	{
 		LastGenerationPrompt = Prompt;
 		GeneratorWidget->SetGenerateEnabled(false);
-		FalClient->GenerateModel(Prompt);
+		FalClient->GenerateModel(Prompt, bTPose);
 	}
 }
 
-void Afal3DDemoCharacter::OnImageGenerateRequested(const FString& ImagePath)
+void Afal3DDemoCharacter::OnImageGenerateRequested(const FString& ImagePath, bool bTPose)
 {
 	if (FalClient)
 	{
 		LastGenerationPrompt = FPaths::GetBaseFilename(ImagePath);
 		GeneratorWidget->SetGenerateEnabled(false);
-		FalClient->GenerateModelFromImage(ImagePath);
+		FalClient->GenerateModelFromImage(ImagePath, bTPose);
 	}
 }
 
@@ -426,6 +427,15 @@ void Afal3DDemoCharacter::OnGenerationStateChanged(EFalGenerationState NewState)
 	}
 }
 
+void Afal3DDemoCharacter::OnConceptImageReady(const FString& ImageUrl)
+{
+	UE_LOG(LogTemplateCharacter, Log, TEXT("Concept image ready: %s"), *ImageUrl);
+	if (GeneratorWidget)
+	{
+		GeneratorWidget->ShowImagePreviewFromUrl(ImageUrl);
+	}
+}
+
 void Afal3DDemoCharacter::OnGenerationComplete(const FString& GlbUrl, const FString& Error)
 {
 	if (!Error.IsEmpty())
@@ -446,10 +456,10 @@ void Afal3DDemoCharacter::OnGenerationComplete(const FString& GlbUrl, const FStr
 	Delegate.BindDynamic(this, &Afal3DDemoCharacter::OnGlbAssetLoaded);
 	UglTFRuntimeFunctionLibrary::glTFLoadAssetFromUrl(GlbUrl, {}, Delegate, FglTFRuntimeConfig());
 
-	// Start rigging in parallel, pass texture URL for proper texturing
-	if (MeshyClient && FalClient)
+	// Rig and animate in parallel with the preview download (one fal.ai request for rig + all clips)
+	if (RigClient)
 	{
-		MeshyClient->RigAndAnimate(GlbUrl, FalClient->LastTextureUrl);
+		RigClient->RigAndAnimate(GlbUrl);
 	}
 }
 
@@ -500,13 +510,13 @@ void Afal3DDemoCharacter::OnGlbAssetLoaded(UglTFRuntimeAsset* Asset)
 }
 
 //////////////////////////////////////////////////////////////////////////
-// Meshy Rigging
+// Rigging + animation (Meshy via fal.ai)
 
-void Afal3DDemoCharacter::OnRigStateChanged(EMeshyRigState NewState)
+void Afal3DDemoCharacter::OnRigStateChanged(EFalRigState NewState)
 {
-	if (GeneratorWidget && MeshyClient)
+	if (GeneratorWidget && RigClient)
 	{
-		GeneratorWidget->UpdateStatus(MeshyClient->StatusMessage);
+		GeneratorWidget->UpdateStatus(RigClient->StatusMessage);
 	}
 }
 
